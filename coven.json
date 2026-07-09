@@ -1,0 +1,20 @@
+{
+  "$schema": "./docs/coven.schema.json",
+  "model": "anthropic/claude-opus-4-8",
+  "small_model": "anthropic/claude-haiku-4-5-20251001",
+  "default_agent": "builder",
+  "permission": {
+    "bash": {
+      "git push": "ask",
+      "gh *": "ask",
+      "bun install": "allow",
+      "bunx tsc": "allow"
+    },
+    "webfetch": {
+      "*": "ask",
+      "docs.anthropic.com": "allow",
+      "bun.sh": "allow"
+    }
+  },
+  "instructions": ["AGENTS.md"]
+}
