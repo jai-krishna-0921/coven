@@ -11,10 +11,10 @@
 <p align="center">ターミナルに集うコーディングエージェントの一団。</p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/coven-cli"><img alt="npm" src="https://img.shields.io/npm/v/coven-cli?style=flat-square&color=c026d3&label=coven-cli"></a>
-  <a href="https://www.npmjs.com/package/coven-cli"><img alt="downloads" src="https://img.shields.io/npm/dm/coven-cli?style=flat-square&color=a21caf"></a>
-  <a href="./LICENSE"><img alt="license" src="https://img.shields.io/npm/l/coven-cli?style=flat-square&color=7c3aed"></a>
-  <img alt="node" src="https://img.shields.io/node/v/coven-cli?style=flat-square&color=6d28d9">
+  <a href="https://www.npmjs.com/package/thecoven"><img alt="npm" src="https://img.shields.io/npm/v/thecoven?style=flat-square&color=c026d3&label=thecoven"></a>
+  <a href="https://www.npmjs.com/package/thecoven"><img alt="downloads" src="https://img.shields.io/npm/dm/thecoven?style=flat-square&color=a21caf"></a>
+  <a href="./LICENSE"><img alt="license" src="https://img.shields.io/npm/l/thecoven?style=flat-square&color=7c3aed"></a>
+  <img alt="node" src="https://img.shields.io/node/v/thecoven?style=flat-square&color=6d28d9">
   <img alt="typescript" src="https://img.shields.io/badge/types-TypeScript-3178c6?style=flat-square">
 </p>
 
@@ -49,10 +49,10 @@ Coven は、4 つのアイデアを軸に構築された、ターミナルベー
 ## インストール
 
 ```bash
-npm install -g coven-cli          # the binary is `coven`
+npm install -g thecoven          # the binary is `coven`
 # or
-bun install -g coven-cli
-pnpm add -g coven-cli
+bun install -g thecoven
+pnpm add -g thecoven
 ```
 
 ソースから:

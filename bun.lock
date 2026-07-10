@@ -1,10 +1,10 @@
 {
-  "lockfileVersion": 1,
   "configVersion": 1,
   "workspaces": {
     "": {
       "name": "coven",
       "dependencies": {
+        "lockfileVersion": 1,
         "@anthropic-ai/sdk": "^0.110.0",
         "zod": "^4.0.0",
       },

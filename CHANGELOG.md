@@ -31,9 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   finishing-a-branch, using-git-worktrees.
 
 ### Changed
-- Node-compatible build: all Bun-specific APIs replaced with node stdlib; published as
-  `coven-cli` with a `coven` binary that runs under Node ≥ 20.
-- Package renamed `coven` → `coven-cli` (npm name availability); version 0.2.0.
+- Node-compatible build: all Bun-specific APIs replaced with node stdlib; published to npm
+  as `thecoven` with a `coven` binary that runs under Node ≥ 20.
+- Published as `thecoven` (the `coven` and `coven-cli` names were unavailable on npm); the
+  installed command is still `coven`. Version 0.2.0.
 
 ## [0.1.0] — 2026-07-09
 

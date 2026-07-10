@@ -1,5 +1,5 @@
 {
-  "name": "coven-cli",
+  "name": "thecoven",
   "version": "0.2.0",
   "description": "A coven of coding agents in your terminal — multi-agent, skill-driven, guarded.",
   "type": "module",
