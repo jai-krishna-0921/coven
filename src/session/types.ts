@@ -25,6 +25,8 @@ export interface SessionInfo {
   created: number;
   updated: number;
   usage: Usage;
+  /** Accumulated cost in USD, computed from catalog pricing. */
+  cost?: number;
 }
 
 export type ToolStatus = "pending" | "running" | "completed" | "error";
@@ -42,6 +44,8 @@ export type Part =
       title?: string;
       output?: string;
       error?: string;
+      /** Set when this tool output was pruned from model context (render-time mask; data stays). */
+      prunedAt?: number;
     };
 
 export type FinishReason = "stop" | "tool-calls" | "length" | "aborted" | "error";
@@ -57,4 +61,8 @@ export interface Message {
   usage?: Usage;
   finish?: FinishReason;
   time: number;
+  /** Marks a compaction-summary assistant message. */
+  summary?: boolean;
+  /** Marks a compaction-trigger user message. tailStartId = oldest message kept verbatim. */
+  compaction?: { auto: boolean; tailStartId?: string };
 }

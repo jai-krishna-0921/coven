@@ -2,51 +2,113 @@
 
 **A coven of coding agents in your terminal.**
 
-Coven is a terminal-based AI coding assistant built around three ideas:
+Coven is a terminal-based AI coding assistant built around four ideas:
 
-1. **Many agents, not one.** Eleven built-in specialists — a conductor that orchestrates,
-   a planner, a builder, a researcher, a debugger, an optimizer, a reviewer, a tester, an
-   architect, a scribe, and a guardian — each with its own charter, model settings, and
-   permission leash. Add your own with a markdown file.
-2. **Skills over prompts.** Reusable methodology (TDD, systematic debugging,
-   verification-before-completion) ships as on-demand skills the agents load when relevant —
-   progressive disclosure, not system-prompt bloat.
+1. **Many agents, not one.** Eleven built-in specialists — conductor, planner, builder,
+   researcher, debugger, optimizer, reviewer, tester, architect, scribe, guardian — each
+   with its own charter, model settings, and permission leash. Subagents dispatch in
+   parallel; add your own agent with a markdown file.
+2. **Skills over prompts.** Reusable methodology (TDD, systematic debugging, parallel
+   dispatch, verification-before-completion) ships as on-demand skills with rationalization
+   tables and red-flag lists — progressive disclosure, not system-prompt bloat.
 3. **Guardrails as architecture.** Every tool call passes through a permission engine
-   (allow / ask / deny rules with wildcard patterns), a bash command scanner, symlink-safe
-   path containment, and a doom-loop detector. Plugins can observe and veto everything.
+   (allow / ask / deny wildcard rules), a bash command scanner, symlink-safe path
+   containment, and a doom-loop detector. Plugins can observe and veto everything.
+4. **Context that manages itself.** Provider-reported token accounting, DCP-style pruning
+   of stale tool outputs (observation masking), and rolling anchored-summary compaction —
+   long sessions stay sharp instead of dying at the context wall.
 
-Built with [Bun](https://bun.sh) + TypeScript. Two runtime dependencies (`@anthropic-ai/sdk`, `zod`).
+Built with [Bun](https://bun.sh) + TypeScript, runs under plain Node ≥ 20. Two runtime
+dependencies (`@anthropic-ai/sdk`, `zod`).
+
+## Install
+
+```bash
+npm install -g coven-cli     # the binary is `coven`
+# or from source:
+git clone https://github.com/jai-krishna-0921/coven && cd coven && bun install
+```
 
 ## Quickstart
 
 ```bash
-git clone https://github.com/jai-krishna-0921/coven && cd coven
-bun install
-
-export ANTHROPIC_API_KEY=sk-ant-…
-bun run dev                 # interactive session
+export ANTHROPIC_API_KEY=sk-ant-…    # or: coven auth login anthropic
+coven                                 # interactive session
 ```
 
 One-shot mode:
 
 ```bash
-bun run dev run -p "explain what src/session/loop.ts does" --agent researcher
-bun run dev run -p "add input validation to the config loader" --yes   # auto-approve asks
+coven run -p "explain src/session/loop.ts" --agent researcher
+coven run -p "add input validation to the config loader" --yes
 ```
 
-Inspect the roster:
+## BYOK — bring your own key
 
 ```bash
-bun run dev agents
-bun run dev skills
+coven auth login anthropic     # stored in ~/.local/share/coven/auth.json (0600)
+coven auth list                # env vars are detected too
+coven models                   # live catalog from models.dev (cached, offline fallback)
+coven models openrouter
 ```
+
+Any OpenAI-compatible endpoint works via config — `openai`, `groq`, `openrouter`, and
+`ollama` have built-in base URLs:
+
+```jsonc
+// coven.json
+{ "model": "ollama/qwen3-coder", "provider": { "ollama": { "baseUrl": "http://localhost:11434/v1" } } }
+```
+
+Pricing and context windows come from the catalog, so the status line shows real cost and
+context usage per session.
+
+## In the session
+
+```
+/agents · /agent <name>     switch specialist          /status      context %, cost, voice
+/models [filter] · /model   browse / set model         /compact     summarize old history
+/auth login <provider>      BYOK                       /voice on    text-to-speech
+/init                       generate AGENTS.md         /review      dispatch a code review
+/new · /sessions · /resume  session management         /export      transcript to markdown
+!<cmd>                      run a shell command        @file        attach a file
+```
+
+- **Custom commands**: drop markdown in `.coven/commands/` — frontmatter (`description`,
+  `agent`, `model`), `$ARGUMENTS` / `$1..$N` placeholders, `` !`cmd` `` shell injection,
+  `@file` attachments. OpenCode-compatible semantics.
+- **Multi-line input**: end a line with `\` or open a ``` fence.
+- **Tab completion** for commands and agents; input history persists across sessions.
+
+## Voice (TTS)
+
+`/voice on` speaks assistant replies. Backend auto-detection: OpenAI TTS
+(`gpt-4o-mini-tts`, when `OPENAI_API_KEY` + a player exist) → macOS `say` → Linux
+`piper` / `spd-say` / `espeak-ng` → Windows PowerShell SAPI. Zero configuration, zero
+dependencies; `COVEN_TTS=off|say|espeak|…` overrides. Interrupting the session stops
+speech immediately.
+
+## Context management
+
+- **Accounting**: provider-reported usage is ground truth; chars/4 estimation only for
+  pre-flight. The status line shows live context % against the model's real window.
+- **Pruning first** (cheap, no LLM call): old tool outputs beyond a protected 40k-token
+  recency budget are masked (`[Old tool result content cleared]`) — the calls and args stay
+  visible. Protected: skill loads, task reports, todo state, edits. Hysteresis: only when
+  ≥ 20k tokens reclaimable. Nothing is deleted — masks are render-time and reversible.
+- **Compaction second**: at overflow (context − min(20k, max-output) reserve), older turns
+  are summarized into a rolling *anchored summary* (Objective / Important Details / Work
+  State / Next Move / Relevant Files) by the small model, keeping the last 2 turns
+  verbatim. `/compact` triggers it manually.
+- **Cache-friendly**: the message store is append-only; Anthropic prompt caching gets a
+  rolling breakpoint on the last block (0.1× input price on history re-reads).
 
 ## The coven
 
 | Agent | Mode | Charter |
 |---|---|---|
-| `conductor` | primary | Decomposes goals, dispatches specialists, integrates results |
-| `builder` | primary | Implementation, test-first (default agent) |
+| `conductor` | primary | Decomposes goals, dispatches specialists **in parallel**, integrates |
+| `builder` | primary | Implementation, test-first (default) |
 | `planner` | all | Approved design → bite-sized TDD task plan |
 | `researcher` | subagent | Read-only reconnaissance with evidence |
 | `debugger` | all | Four-phase root-cause debugging |
@@ -57,44 +119,15 @@ bun run dev skills
 | `scribe` | subagent | Docs verified against the source |
 | `guardian` | subagent | Security audit: injection, traversal, leaks, bypasses |
 
-Primary agents are driven by you (`/agent conductor`). Subagents are dispatched by agents
-via the `task` tool — each runs in an isolated child session with its own permission rules
-and reports back.
+A subagent is a child session with its own permission ruleset. Consecutive `task` calls in
+one turn run **concurrently**; read-only tools batch into concurrent waves; mutating tools
+are strict barriers.
 
-Custom agents are markdown files in `.coven/agents/`:
+## Permissions
 
-```markdown
----
-name: shipwright
-description: Release engineering — versioning, changelogs, tags
-mode: subagent
----
-You are the Shipwright. …
-```
-
-## Skills
-
-A skill is a directory with a `SKILL.md`:
-
-```markdown
----
-name: test-driven-development
-description: Use when implementing any feature or bugfix, before writing implementation code.
----
-# The methodology, loaded only when needed…
-```
-
-Only names + descriptions enter the system prompt; bodies load on demand through the
-`skill` tool. Discovery roots: `~/.config/coven/skills`, `.claude/skills` (Claude Code
-compatible), `.coven/skills`, plus `skills.paths` from config.
-
-## Guardrails
-
-Permissions are ordered rules — **last match wins**, so later sources override earlier ones
-(baseline → agent → your config → session "always" approvals):
+Ordered rules, **last match wins** (baseline → agent → your config → session approvals):
 
 ```jsonc
-// coven.json
 {
   "permission": {
     "bash": { "*": "ask", "git status": "allow", "git push": "ask" },
@@ -104,104 +137,63 @@ Permissions are ordered rules — **last match wins**, so later sources override
 }
 ```
 
-What's always on:
-
-- **Bash scanning** — commands are parsed (pipes, `&&`, `$()` substitution) into command
-  heads matched against your rules; `rm -rf`, force-pushes, `curl | sh`, and `sudo` are
-  flagged dangerous and always ask.
-- **Path containment** — file tools resolve symlinks *before* the containment check;
-  escaping the workspace requires an `external_directory` approval.
-- **Doom-loop detection** — three identical consecutive tool calls pause for confirmation.
-- **Secret hygiene** — `.env` reads ask; key material like `id_rsa` is denied outright.
-
-Every ask is answered `once`, `always` (persists for the session), or `reject` — with
-optional feedback that goes straight back to the model.
+Always on: bash scanning (pipes, `$()`, env-prefixes → command heads; `rm -rf`,
+force-push, `curl | sh`, `sudo` always ask), symlink-resolved path containment,
+doom-loop detection, `.env` ask / key-material deny.
 
 ## Plugins
 
-Drop a TypeScript file in `.coven/plugins/`:
-
 ```ts
+// .coven/plugins/my-plugin.ts
 export default function myPlugin({ root, config, subscribe }) {
   return {
     "tool.execute.before": async (meta, output) => { /* mutate output.args */ },
-    "tool.execute.after":  async (meta, result) => { /* mutate result */ },
     "permission.ask":      async (request, verdict) => { /* verdict.action = "deny" */ },
     "chat.system":         async (input, output) => { output.system.push("…") },
-    tools: { /* register custom tools with zod schemas */ },
+    tools: { /* custom tools with zod schemas */ },
   };
 }
 ```
 
-Hooks follow one convention: `(input, output) => void` — mutate `output` in place.
-See `.coven/plugins/audit-log.ts` for a working example that records every command and
-edit to `.coven/audit.jsonl`.
+See `.coven/plugins/audit-log.ts` — records every command and edit to `.coven/audit.jsonl`.
 
 ## Configuration
 
-`coven.json` (project, discovered walking up from cwd) merged over
-`~/.config/coven/coven.json` (global):
-
 | Key | What |
 |---|---|
-| `model` | `"provider/model"`, e.g. `"anthropic/claude-opus-4-8"` |
-| `small_model` | Cheap model for internal work |
+| `model` / `small_model` | `"provider/model"` — small model handles compaction |
 | `default_agent` | Session starting agent (default `builder`) |
-| `agent.<name>` | Override/add agents: `model`, `prompt`, `steps`, `permission`, `disable`… |
+| `agent.<name>` | Override/add agents: `model`, `prompt`, `steps`, `permission`, `disable` |
 | `provider.<id>` | `apiKeyEnv`, `baseUrl`, `protocol: "anthropic" \| "openai"` |
-| `permission` | The ruleset (see above) |
-| `plugins` | Plugin module paths |
-| `instructions` | Extra instruction files for the system prompt |
+| `permission` | The ruleset |
+| `tts` | `{ backend, voice, rate, openaiVoice, openaiModel }` |
+| `plugins` / `instructions` / `skills.paths` | Extensions |
 | `max_steps` | Agentic iteration cap per turn (default 100) |
-
-Providers: `anthropic` is native; anything speaking the OpenAI wire protocol works via
-config — `openai`, `groq`, `openrouter`, and `ollama` have built-in base URLs:
-
-```jsonc
-{ "model": "ollama/qwen3-coder", "provider": { "ollama": { "baseUrl": "http://localhost:11434/v1" } } }
-```
 
 ## Architecture
 
 ```
-┌─────────────────────────── tui (REPL, streaming, asks) ──────────────────────────┐
-│ ┌──────────────────────── session (loop, store, system) ─────────────────────┐  │
-│ │ ┌────────── agent ─────────┐ ┌────────── skill ─────────┐ ┌─── plugin ───┐ │  │
-│ │ │ 11 builtins + md files   │ │ SKILL.md discovery       │ │ hooks, tools │ │  │
-│ │ └──────────────────────────┘ └──────────────────────────┘ └──────────────┘ │  │
-│ │ ┌────────────── tool ─────────────┐ ┌──────────── provider ─────────────┐  │  │
-│ │ │ bash·read·write·edit·grep·glob  │ │ anthropic native · openai-compat  │  │  │
-│ │ │ ls·webfetch·todo·task·skill     │ │ normalized LLMEvent stream        │  │  │
-│ │ └─────────────────────────────────┘ └───────────────────────────────────┘  │  │
-│ │ ┌───────────────────── permission (rules, ask flow) ──────────────────────┐│  │
-│ │ └──────────────────────────────────────────────────────────────────────────┘│  │
-│ └─────────────────────────────────────────────────────────────────────────────┘  │
-│      bus (typed events) · config (zod, cascading) · util (errors, ids, ansi)     │
-└───────────────────────────────────────────────────────────────────────────────────┘
+tui (REPL · history · completion · voice)
+ └─ session (loop · store · context: prune/compact · system)
+     ├─ agent (11 builtins + md)   skill (SKILL.md)   plugin (hooks)   command (registry)
+     ├─ tool (bash·read·write·edit·grep·glob·ls·webfetch·todo·task·skill) ── waves ──┐
+     ├─ provider (anthropic native · openai-compat → one LLMEvent stream)            │
+     ├─ catalog (models.dev + fallback)   auth (BYOK)   tts (say/espeak/openai)      │
+     └─ permission (rules · ask flow) ◄──────────────────────────────────────────────┘
+bus (typed events) · config (zod, cascading) · util
 ```
 
-Dependencies point downward only. The session loop owns tool execution: validate args
-(zod) → permission gate → plugin `before` → execute → plugin `after` → feed result back.
-A subagent is just a child session run to completion.
+Dependencies point downward only. The session loop owns tool execution: validate (zod) →
+permission gate → plugin `before` → execute → plugin `after` → feed back.
 
 ## Development
 
 ```bash
-bun test              # 68 tests, includes a full loop integration suite with a fake provider
-bunx tsc --noEmit     # strict typecheck
-bun run compile       # single-binary build → dist/coven
+bun test              # 180+ tests incl. loop integration with a fake provider
+bun run typecheck     # strict tsc
+bun run build         # node-compatible bundle → dist/index.js
+node dist/index.js --version   # verify the published artifact under plain node
 ```
-
-The repo dogfoods its own methodology: skills in `.coven/skills/`, agent instructions in
-`AGENTS.md`, audit-log plugin enabled.
-
-## Roadmap
-
-- Session compaction (auto-summarize on context overflow)
-- MCP client support
-- Parallel subagent dispatch
-- LSP diagnostics after edits
-- Session restore (`coven --continue`)
 
 ## License
 

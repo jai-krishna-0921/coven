@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defineTool, truncateOutput } from "./types.ts";
 import { scanBashCommand } from "./bash-scan.ts";
+import { spawnCapture } from "../util/proc.ts";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
@@ -25,36 +26,22 @@ export const bashTool = defineTool({
     });
 
     ctx.progress(args.command.slice(0, 60));
-    const proc = Bun.spawn(["bash", "-c", args.command], {
+    const result = await spawnCapture(["bash", "-c", args.command], {
       cwd: ctx.root,
-      stdout: "pipe",
-      stderr: "pipe",
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      timeoutMs: Math.min(args.timeout ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS),
+      signal: ctx.abort,
     });
 
-    const timeout = Math.min(args.timeout ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
-    const timer = setTimeout(() => proc.kill(9), timeout);
-    const onAbort = () => proc.kill(9);
-    ctx.abort.addEventListener("abort", onAbort, { once: true });
-
-    try {
-      const [stdout, stderr, exitCode] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]);
-      let output = "";
-      if (stdout) output += stdout;
-      if (stderr) output += (output ? "\n--- stderr ---\n" : "") + stderr;
-      if (exitCode !== 0) output += `\n(exit code ${exitCode})`;
-      return {
-        title: args.description ?? args.command.slice(0, 100),
-        output: truncateOutput(output.trim() || "(no output)"),
-        metadata: { exitCode },
-      };
-    } finally {
-      clearTimeout(timer);
-      ctx.abort.removeEventListener("abort", onAbort);
-    }
+    let output = "";
+    if (result.stdout) output += result.stdout;
+    if (result.stderr) output += (output ? "\n--- stderr ---\n" : "") + result.stderr;
+    if (result.timedOut) output += "\n(killed: timeout exceeded)";
+    else if (result.exitCode !== 0) output += `\n(exit code ${result.exitCode})`;
+    return {
+      title: args.description ?? args.command.slice(0, 100),
+      output: truncateOutput(output.trim() || "(no output)"),
+      metadata: { exitCode: result.exitCode },
+    };
   },
 });

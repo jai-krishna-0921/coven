@@ -26,7 +26,11 @@ const KNOWN_KEY_ENVS: Record<string, string> = {
 export class ProviderRegistry {
   private adapters = new Map<string, ProviderAdapter>();
 
-  constructor(private config: CovenConfig) {}
+  constructor(
+    private config: CovenConfig,
+    /** BYOK hook: resolves stored credentials (auth.json) when env vars are absent. */
+    private resolveStoredKey?: (providerID: string) => string | undefined,
+  ) {}
 
   resolve(modelRef: string): { adapter: ProviderAdapter; ref: ModelRef } {
     const ref = parseModelRef(modelRef);
@@ -35,7 +39,7 @@ export class ProviderRegistry {
 
     const providerConfig = this.config.provider?.[ref.providerID];
     const keyEnv = providerConfig?.apiKeyEnv ?? KNOWN_KEY_ENVS[ref.providerID];
-    const apiKey = keyEnv ? process.env[keyEnv] : undefined;
+    const apiKey = (keyEnv ? process.env[keyEnv] : undefined) ?? this.resolveStoredKey?.(ref.providerID);
     const protocol = providerConfig?.protocol ?? (ref.providerID === "anthropic" ? "anthropic" : "openai");
 
     let adapter: ProviderAdapter;
@@ -50,5 +54,11 @@ export class ProviderRegistry {
     }
     this.adapters.set(ref.providerID, adapter);
     return { adapter, ref };
+  }
+
+  /** Drop cached adapters so a freshly-stored key (BYOK) takes effect at once. */
+  invalidate(providerID?: string): void {
+    if (providerID) this.adapters.delete(providerID);
+    else this.adapters.clear();
   }
 }

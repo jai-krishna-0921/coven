@@ -70,6 +70,26 @@ describe("PermissionEngine.ask", () => {
     await engine.ask("ses_1", { permission: "bash", patterns: ["make"], title: "make" });
   });
 
+  test("always settles concurrent identical pendings without a second prompt", async () => {
+    const bus = new Bus();
+    const engine = new PermissionEngine(bus, []);
+    let asks = 0;
+    bus.subscribe((event) => {
+      if (event.type === "permission.asked") asks++;
+    });
+    // Two concurrent identical asks are pending at once.
+    const settled = Promise.all([
+      engine.ask("ses_1", { permission: "webfetch", patterns: ["example.com"], title: "a" }),
+      engine.ask("ses_1", { permission: "webfetch", patterns: ["example.com"], title: "b" }),
+    ]);
+    expect(engine.pendingRequests()).toHaveLength(2);
+    // Answering the first with "always" resolves BOTH.
+    engine.reply(engine.pendingRequests()[0]!.id, "always");
+    await settled;
+    expect(engine.pendingRequests()).toHaveLength(0);
+    expect(asks).toBe(2); // both were published, but only one needed an answer
+  });
+
   test("always persists an allow rule for subsequent asks", async () => {
     const bus = new Bus();
     const engine = new PermissionEngine(bus, []);

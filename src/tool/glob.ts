@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { statSync } from "node:fs";
+import { join } from "node:path";
 import { defineTool, truncateOutput } from "./types.ts";
 import { resolvePath } from "./path.ts";
+import { globScan } from "../util/glob.ts";
 
 export const globTool = defineTool({
   id: "glob",
@@ -18,19 +20,15 @@ export const globTool = defineTool({
       patterns: [base.display],
       title: `Glob ${args.pattern}`,
     });
-    const glob = new Bun.Glob(args.pattern);
-    const matches: { path: string; mtime: number }[] = [];
-    for await (const match of glob.scan({ cwd: base.absolute, dot: false })) {
-      if (match.includes("node_modules/") || match.startsWith(".git/")) continue;
+    const matches = globScan(base.absolute, args.pattern, 1000).map((path) => {
       let mtime = 0;
       try {
-        mtime = statSync(`${base.absolute}/${match}`).mtimeMs;
+        mtime = statSync(join(base.absolute, path)).mtimeMs;
       } catch {
-        // File may have been removed mid-scan; keep it with mtime 0.
+        // File may have vanished mid-scan; keep it with mtime 0.
       }
-      matches.push({ path: match, mtime });
-      if (matches.length >= 1000) break;
-    }
+      return { path, mtime };
+    });
     matches.sort((a, b) => b.mtime - a.mtime);
     const output = matches.map((m) => m.path).join("\n");
     return {

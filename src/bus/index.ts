@@ -18,7 +18,9 @@ export type BusEvent =
   | { type: "tool.started"; sessionID: string; callID: string; tool: string }
   | { type: "tool.finished"; sessionID: string; callID: string; tool: string; status: "completed" | "error" }
   | { type: "permission.asked"; request: PermissionRequest }
-  | { type: "permission.replied"; requestID: string; reply: "once" | "always" | "reject" };
+  | { type: "permission.replied"; requestID: string; reply: "once" | "always" | "reject" }
+  | { type: "session.compacting"; sessionID: string }
+  | { type: "session.compacted"; sessionID: string; tokensBefore: number };
 
 export type BusEventType = BusEvent["type"];
 

@@ -113,6 +113,14 @@ export class PermissionEngine {
       for (const pattern of entry.request.patterns) {
         this.approved.push({ permission: entry.request.permission, pattern, action: "allow" });
       }
+      // Settle any concurrent pendings the new allow-rules now cover — a
+      // parallel wave of identical asks shouldn't prompt twice.
+      for (const [id, other] of this.pending) {
+        if (other.request.patterns.every((p) => this.resolve(other.request.permission, p).action === "allow")) {
+          this.pending.delete(id);
+          other.deferred.resolve();
+        }
+      }
     }
     entry.deferred.resolve();
   }

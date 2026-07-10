@@ -1,17 +1,24 @@
 {
-  "name": "coven",
-  "version": "0.1.0",
+  "name": "coven-cli",
+  "version": "0.2.0",
   "description": "A coven of coding agents in your terminal — multi-agent, skill-driven, guarded.",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "coven": "./src/index.ts"
+    "coven": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "bun run src/index.ts",
     "test": "bun test",
-    "typecheck": "bunx tsc --noEmit",
-    "compile": "bun build src/index.ts --compile --outfile dist/coven"
+    "typecheck": "tsc --noEmit",
+    "build": "bun build src/index.ts --target=node --outfile dist/index.js",
+    "compile": "bun build src/index.ts --compile --outfile dist/coven",
+    "prepublishOnly": "bun test && bun run typecheck && bun run build && node dist/index.js --version"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
@@ -22,7 +29,7 @@
     "typescript": "^5.7.0"
   },
   "engines": {
-    "bun": ">=1.3.0"
+    "node": ">=20"
   },
   "repository": {
     "type": "git",
@@ -34,6 +41,8 @@
     "terminal",
     "multi-agent",
     "claude",
-    "cli"
+    "cli",
+    "tts",
+    "byok"
   ]
 }

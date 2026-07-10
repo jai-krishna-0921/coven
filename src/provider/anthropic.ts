@@ -4,7 +4,7 @@ import { ProviderError } from "../util/error.ts";
 import type { LLMEvent, ModelMessage, ProviderAdapter, StreamInput } from "./types.ts";
 
 function toAnthropicMessages(messages: ModelMessage[]): MessageParam[] {
-  return messages.map((message) => {
+  const wire = messages.map((message) => {
     const content: ContentBlockParam[] = message.content.map((part): ContentBlockParam => {
       switch (part.type) {
         case "text":
@@ -17,6 +17,21 @@ function toAnthropicMessages(messages: ModelMessage[]): MessageParam[] {
     });
     return { role: message.role, content };
   });
+  // Rolling prefix cache: breakpoints on the last block of the two most recent
+  // messages. The whole conversation up to a breakpoint is a cache hit next
+  // turn (0.1x input price). Two breakpoints (of Anthropic's 4 max — the
+  // system prompt uses one) keep the cache warm even when a single step emits
+  // more than the 20-block cache lookback window (parallel tool waves).
+  const markTail = (content: ContentBlockParam[] | string | undefined): void => {
+    if (!Array.isArray(content) || content.length === 0) return;
+    const block = content.at(-1)!;
+    if (block.type === "text" || block.type === "tool_result") {
+      (block as { cache_control?: { type: "ephemeral" } }).cache_control = { type: "ephemeral" };
+    }
+  };
+  markTail(wire.at(-1)?.content);
+  if (wire.length > 1) markTail(wire.at(-2)?.content);
+  return wire;
 }
 
 export class AnthropicAdapter implements ProviderAdapter {

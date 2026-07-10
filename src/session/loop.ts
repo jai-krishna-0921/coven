@@ -25,11 +25,54 @@ import { toJsonSchema, truncateOutput, type ToolContext, type ToolDef, type Tool
 import { createId } from "../util/id.ts";
 import { NamedError, PermissionDeniedError, PermissionRejectedError } from "../util/error.ts";
 import { createLogger } from "../util/log.ts";
+import {
+  buildSummaryPrompt,
+  filterCompacted,
+  isOverflow,
+  pruneToolOutputs,
+  selectCompaction,
+  usableTokens,
+  PRUNED_MASK,
+  TOOL_OUTPUT_MAX_CHARS_FOR_SUMMARY,
+  type ContextLimits,
+} from "./context.ts";
 import { SessionStore } from "./store.ts";
 import { assembleSystemPrompt } from "./system.ts";
-import { addUsage, type Message, type Part } from "./types.ts";
+import { addUsage, type Message, type Part, type Usage } from "./types.ts";
 
 const log = createLogger("loop");
+
+/** Tools with no side effects — safe to run concurrently within a turn. */
+const PARALLEL_SAFE = new Set(["read", "ls", "glob", "grep", "webfetch", "skill"]);
+
+type PendingCall = { callID: string; tool: string; args: unknown };
+
+/**
+ * Group consecutive calls into execution waves: runs of read-only tools
+ * merge into one concurrent wave, runs of task calls merge (parallel
+ * subagent dispatch), everything else runs alone as a barrier.
+ */
+export function buildWaves(calls: PendingCall[]): PendingCall[][] {
+  const waves: { kind: "safe" | "task" | "barrier"; calls: PendingCall[] }[] = [];
+  for (const call of calls) {
+    const kind = PARALLEL_SAFE.has(call.tool) ? "safe" : call.tool === "task" ? "task" : "barrier";
+    const last = waves.at(-1);
+    if (last && kind !== "barrier" && last.kind === kind) last.calls.push(call);
+    else waves.push({ kind, calls: [call] });
+  }
+  return waves.map((wave) => wave.calls);
+}
+
+export interface ModelPricing {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+export interface ModelMeta extends ContextLimits {
+  cost?: ModelPricing;
+}
 
 export interface EngineOptions {
   config: CovenConfig;
@@ -41,6 +84,23 @@ export interface EngineOptions {
   skills: SkillRegistry;
   plugins: PluginHost;
   permissions: PermissionEngine;
+  /** Model metadata lookup (context window, output limit, pricing). Optional — sane defaults apply. */
+  modelMeta?: (providerID: string, modelID: string) => ModelMeta;
+}
+
+const DEFAULT_META: ModelMeta = { contextLimit: 200_000, outputLimit: 32_000 };
+
+export type CompactResult = { status: "compacted" | "nothing" | "failed"; error?: string };
+
+function usageCost(usage: Usage, pricing?: ModelPricing): number {
+  if (!pricing) return 0;
+  return (
+    (usage.inputTokens * pricing.input +
+      usage.outputTokens * pricing.output +
+      usage.cacheReadTokens * pricing.cacheRead +
+      usage.cacheWriteTokens * pricing.cacheWrite) /
+    1_000_000
+  );
 }
 
 export class SessionEngine {
@@ -92,10 +152,39 @@ export class SessionEngine {
     }
   }
 
+  /** Current context usage for the status line: last turn's total vs usable window. */
+  contextInfo(sessionID: string): { tokens: number; usable: number; pct: number } {
+    const messages = this.o.store.messagesOf(sessionID);
+    let tokens = 0;
+    let meta = DEFAULT_META;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]!;
+      // Skip summary messages: their usage is the small-model summarization
+      // request, not the real context, and would show a bogus ~100% right
+      // after a compaction that actually SHRANK the context.
+      if (message.role === "assistant" && message.usage && !message.summary) {
+        const usage = message.usage;
+        tokens = usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
+        if (message.model) {
+          const slash = message.model.indexOf("/");
+          meta = this.meta(message.model.slice(0, slash), message.model.slice(slash + 1));
+        }
+        break;
+      }
+    }
+    const usable = usableTokens(meta);
+    return { tokens, usable, pct: usable > 0 ? Math.min(100, Math.round((tokens / usable) * 100)) : 0 };
+  }
+
+  private meta(providerID: string, modelID: string): ModelMeta {
+    return this.o.modelMeta?.(providerID, modelID) ?? DEFAULT_META;
+  }
+
   private async runLoop(sessionID: string, agent: AgentInfo, abort: AbortSignal): Promise<Message> {
     const session = this.o.store.get(sessionID)!;
     const modelRef = agent.model ?? this.o.config.model ?? DEFAULT_MODEL;
     const { adapter, ref } = this.o.providers.resolve(modelRef);
+    const meta = this.meta(ref.providerID, ref.modelID);
     const maxSteps = agent.steps ?? this.o.config.max_steps ?? DEFAULT_MAX_STEPS;
 
     const system = assembleSystemPrompt({
@@ -120,11 +209,33 @@ export class SessionEngine {
     const params = await this.o.plugins.trigger(
       "chat.params",
       { agent: agent.name, model: modelRef },
-      { temperature: agent.temperature, maxTokens: undefined as number | undefined },
+      // Floor to a sane minimum: a catalog entry with outputLimit 0 (missing
+      // field) must never produce max_tokens: 0, which 400s every request.
+      { temperature: agent.temperature, maxTokens: (meta.outputLimit > 0 ? Math.min(meta.outputLimit, 32_000) : 32_000) as number | undefined },
     );
 
     const recentCalls: string[] = [];
     let lastAssistant: Message | undefined;
+    let lastTotalTokens = 0;
+
+    // Pre-flight: if the previous turn ended near the window, prune/compact
+    // BEFORE the first request of this turn instead of hitting a 4xx.
+    const history = this.o.store.messagesOf(sessionID);
+    for (let i = history.length - 1; i >= 0; i--) {
+      const message = history[i]!;
+      if (message.role === "assistant" && message.usage) {
+        const total =
+          message.usage.inputTokens + message.usage.outputTokens + message.usage.cacheReadTokens + message.usage.cacheWriteTokens;
+        if (isOverflow(total, meta) && !message.summary) {
+          const freed = pruneToolOutputs(history);
+          if (freed > 0) this.o.store.persist(sessionID);
+          if (total - freed >= usableTokens(meta)) {
+            await this.compact(sessionID, { auto: false, abort });
+          }
+        }
+        break;
+      }
+    }
 
     for (let step = 0; step < maxSteps; step++) {
       if (abort.aborted) break;
@@ -209,6 +320,9 @@ export class SessionEngine {
               finishReason = event.reason;
               assistant.usage = event.usage;
               session.usage = addUsage(session.usage, event.usage);
+              session.cost = (session.cost ?? 0) + usageCost(event.usage, meta.cost);
+              lastTotalTokens =
+                event.usage.inputTokens + event.usage.outputTokens + event.usage.cacheReadTokens + event.usage.cacheWriteTokens;
               break;
             }
           }
@@ -237,11 +351,14 @@ export class SessionEngine {
 
       if (pendingCalls.length === 0) break;
 
-      // ---- Execute tool calls sequentially ----
-      for (const call of pendingCalls) {
-        if (abort.aborted) break;
+      // ---- Execute tool calls in waves ----
+      // Read-only tools run concurrently; consecutive task calls run
+      // concurrently (parallel subagent dispatch); mutating tools are
+      // barriers that run alone, in order.
+      const runCall = async (call: { callID: string; tool: string; args: unknown }): Promise<void> => {
+        if (abort.aborted) return;
         const part = assistant.parts.find((p) => p.type === "tool" && p.callID === call.callID);
-        if (!part || part.type !== "tool") continue;
+        if (!part || part.type !== "tool") return;
 
         // Doom-loop guard: 3 identical consecutive calls need explicit approval.
         const signature = `${call.tool}:${JSON.stringify(call.args)}`;
@@ -267,6 +384,23 @@ export class SessionEngine {
           tool: call.tool,
           status: result.isError ? "error" : "completed",
         });
+      };
+
+      for (const wave of buildWaves(pendingCalls)) {
+        if (abort.aborted) break;
+        if (wave.length === 1) await runCall(wave[0]!);
+        else await Promise.all(wave.map(runCall));
+      }
+
+      // Overflow → auto-compact (prune first; often compaction is avoided).
+      if (!abort.aborted && isOverflow(lastTotalTokens, meta) && !assistant.summary) {
+        const freed = pruneToolOutputs(this.o.store.messagesOf(sessionID));
+        if (freed > 0) this.o.store.persist(sessionID);
+        // Pruning shrinks the NEXT request; if the last known total is still
+        // past the limit even after the estimated savings, summarize now.
+        if (lastTotalTokens - freed >= usableTokens(meta)) {
+          await this.compact(sessionID, { auto: true, abort });
+        }
       }
 
       if (step === maxSteps - 1) {
@@ -274,7 +408,111 @@ export class SessionEngine {
       }
     }
 
+    // Turn-end housekeeping: opportunistic prune keeps future turns lean.
+    const freed = pruneToolOutputs(this.o.store.messagesOf(sessionID));
+    if (freed > 0) {
+      this.o.store.persist(sessionID);
+      log.info("pruned old tool outputs", { sessionID, tokensFreed: freed });
+    }
+
     return lastAssistant ?? this.o.store.messagesOf(sessionID).at(-1)!;
+  }
+
+  /**
+   * Compaction: summarize the head of the visible history into a rolling
+   * anchored summary, keeping the most recent turns verbatim. Used both for
+   * auto-overflow and the /compact command.
+   */
+  async compact(sessionID: string, opts: { auto: boolean; abort: AbortSignal }): Promise<CompactResult> {
+    const session = this.o.store.get(sessionID);
+    if (!session) return { status: "nothing" };
+    const modelRef = this.o.config.small_model ?? this.o.config.model ?? DEFAULT_MODEL;
+    const { adapter, ref } = this.o.providers.resolve(modelRef);
+    const meta = this.meta(ref.providerID, ref.modelID);
+
+    const visible = filterCompacted(this.o.store.messagesOf(sessionID));
+    const { head, tailStartId } = selectCompaction(visible, meta);
+    if (head.length === 0) return { status: "nothing" };
+
+    const previousSummary = [...visible]
+      .reverse()
+      .find((m) => m.summary)
+      ?.parts.filter((p) => p.type === "text")
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join("\n");
+
+    // Render the head with tight tool-output caps + the summary instruction.
+    const headMessages = this.renderModelMessages(head, TOOL_OUTPUT_MAX_CHARS_FOR_SUMMARY);
+    headMessages.push({ role: "user", content: [{ type: "text", text: buildSummaryPrompt(previousSummary) }] });
+
+    this.o.bus.publish({ type: "session.compacting", sessionID });
+
+    // Stream into a BUFFER first — nothing is persisted until the summary
+    // succeeds, so a transient failure never leaves a dangling trigger.
+    let text = "";
+    let usage: Usage | undefined;
+    try {
+      for await (const event of adapter.stream({
+        model: ref.modelID,
+        system: "You are a conversation summarizer. Follow the user's template exactly.",
+        messages: headMessages,
+        tools: [],
+        maxTokens: 4_096,
+        abort: opts.abort,
+      })) {
+        if (event.type === "text-delta") text += event.text;
+        if (event.type === "finish") usage = event.usage;
+      }
+    } catch (error) {
+      log.error("compaction failed", { sessionID, error: String(error) });
+      return { status: "failed", error: error instanceof Error ? error.message : String(error) };
+    }
+    if (!text.trim()) return { status: "failed", error: "summary was empty" };
+
+    // Success: append trigger + summary (+ continue) atomically.
+    this.o.store.appendMessage({
+      id: createId("msg"),
+      sessionID,
+      role: "user",
+      agent: session.agent,
+      compaction: { auto: opts.auto, tailStartId },
+      parts: [{ id: createId("prt"), type: "text", text: "What did we do so far?" }],
+      time: Date.now(),
+    });
+    this.o.store.appendMessage({
+      id: createId("msg"),
+      sessionID,
+      role: "assistant",
+      agent: "compaction",
+      model: modelRef,
+      summary: true,
+      finish: "stop",
+      usage,
+      parts: [{ id: createId("prt"), type: "text", text }],
+      time: Date.now(),
+    });
+    if (usage) session.cost = (session.cost ?? 0) + usageCost(usage, meta.cost);
+    this.o.store.update(session);
+    this.o.bus.publish({ type: "session.compacted", sessionID, tokensBefore: 0 });
+
+    if (opts.auto) {
+      this.o.store.appendMessage({
+        id: createId("msg"),
+        sessionID,
+        role: "user",
+        agent: session.agent,
+        parts: [
+          {
+            id: createId("prt"),
+            type: "text",
+            text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+            synthetic: true,
+          },
+        ],
+        time: Date.now(),
+      });
+    }
+    return { status: "compacted" };
   }
 
   private async executeTool(
@@ -388,11 +626,20 @@ export class SessionEngine {
     return text || "(subagent returned no text)";
   }
 
-  /** Convert stored history to provider-agnostic model messages. */
+  /** Visible history → provider messages: compaction filter + pruned masks applied. */
   private toModelMessages(sessionID: string, excludeMessageID: string): ModelMessage[] {
+    const visible = filterCompacted(this.o.store.messagesOf(sessionID)).filter((m) => m.id !== excludeMessageID);
+    return this.renderModelMessages(visible);
+  }
+
+  /**
+   * Convert stored messages to provider-agnostic model messages.
+   * Pruned tool outputs render as a short mask (observation masking — the
+   * call and args stay visible, the stale output does not).
+   */
+  private renderModelMessages(messages: Message[], toolOutputCap?: number): ModelMessage[] {
     const out: ModelMessage[] = [];
-    for (const message of this.o.store.messagesOf(sessionID)) {
-      if (message.id === excludeMessageID) continue;
+    for (const message of messages) {
       if (message.role === "user") {
         const text = message.parts
           .filter((p) => p.type === "text")
@@ -409,12 +656,13 @@ export class SessionEngine {
           content.push({ type: "text", text: part.text });
         } else if (part.type === "tool") {
           content.push({ type: "tool-call", callID: part.callID, tool: part.tool, args: part.args });
-          results.push({
-            type: "tool-result",
-            callID: part.callID,
-            output: part.output ?? part.error ?? "(no result — interrupted)",
-            isError: part.status === "error",
-          });
+          let output = part.output ?? part.error ?? "(no result — interrupted)";
+          if (part.prunedAt) {
+            output = PRUNED_MASK;
+          } else if (toolOutputCap && output.length > toolOutputCap) {
+            output = `${output.slice(0, toolOutputCap)}\n[Tool output truncated for compaction: omitted ${output.length - toolOutputCap} chars]`;
+          }
+          results.push({ type: "tool-result", callID: part.callID, output, isError: part.status === "error" });
         }
       }
       if (content.length > 0) out.push({ role: "assistant", content });

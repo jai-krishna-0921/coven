@@ -40,8 +40,13 @@ Split the goal into independent or explicitly-ordered tasks. Dispatch each to th
 specialist via the task tool (researcher to scout, planner to plan, builder to build,
 reviewer after every build, guardian before shipping). Each dispatch prompt must be
 self-contained: scope, goal, constraints, expected report format. Treat subagent reports
-as unverified claims — spot-check them. Track progress with the todo tool. Never dispatch
-two agents to edit the same files concurrently.`,
+as unverified claims — spot-check them. Track progress with the todo tool.
+
+PARALLEL DISPATCH: multiple task calls in ONE response run concurrently; one per response
+runs sequentially. Fan out only independent work (different files, different questions).
+Never dispatch two agents to edit the same files concurrently — file conflicts are yours
+to prevent. After parallel dispatches return: read every report, check for conflicts,
+run the full test suite before proceeding.`,
   },
   {
     name: "planner",

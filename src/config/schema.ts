@@ -55,6 +55,17 @@ export const CovenConfig = z
     plugins: z.array(z.string()).optional(),
     /** Hard cap on agentic iterations per user turn. */
     max_steps: z.number().int().positive().optional(),
+    /** Text-to-speech settings (see src/tts). */
+    tts: z
+      .object({
+        backend: z.string().optional(),
+        voice: z.string().optional(),
+        rate: z.number().optional(),
+        openaiVoice: z.string().optional(),
+        openaiModel: z.string().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type CovenConfig = z.infer<typeof CovenConfig>;

@@ -14,6 +14,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { parseFrontmatter } from "../util/frontmatter.ts";
+import { globScan } from "../util/glob.ts";
 import { createLogger } from "../util/log.ts";
 import type { CovenConfig } from "../config/schema.ts";
 
@@ -31,8 +32,7 @@ export interface SkillInfo {
 async function scanRoot(root: string): Promise<SkillInfo[]> {
   if (!existsSync(root)) return [];
   const skills: SkillInfo[] = [];
-  const glob = new Bun.Glob("**/SKILL.md");
-  for await (const match of glob.scan({ cwd: root, dot: false })) {
+  for (const match of globScan(root, "**/SKILL.md")) {
     const path = join(root, match);
     try {
       const { data, body } = parseFrontmatter(readFileSync(path, "utf8"));

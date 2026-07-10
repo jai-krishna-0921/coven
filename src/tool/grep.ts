@@ -1,6 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { z } from "zod";
 import { defineTool, truncateOutput } from "./types.ts";
 import { resolvePath } from "./path.ts";
+import { globScan } from "../util/glob.ts";
+import { spawnCapture } from "../util/proc.ts";
 
 export const grepTool = defineTool({
   id: "grep",
@@ -26,10 +30,9 @@ export const grepTool = defineTool({
     if (args.glob) rgArgs.push("--glob", args.glob);
     rgArgs.push("--regexp", args.pattern, base.absolute);
 
-    const proc = Bun.spawnSync(["rg", ...rgArgs], { stdout: "pipe", stderr: "pipe" });
-    if (proc.exitCode === 0 || proc.exitCode === 1) {
-      const raw = proc.stdout.toString();
-      const lines = raw
+    const rg = await spawnCapture(["rg", ...rgArgs], { signal: ctx.abort, timeoutMs: 30_000 });
+    if (rg.exitCode === 0 || rg.exitCode === 1) {
+      const lines = rg.stdout
         .split("\n")
         .filter(Boolean)
         .map((line) => (line.startsWith(base.absolute) ? line.slice(base.absolute.length + 1) : line))
@@ -41,14 +44,14 @@ export const grepTool = defineTool({
       };
     }
 
-    // Fallback: JS scan (rg not installed or errored).
+    // Fallback: JS scan (rg not installed — exit 127 — or errored).
     const regex = new RegExp(args.pattern, args.ignoreCase ? "i" : "");
-    const glob = new Bun.Glob(args.glob ?? "**/*");
+    const files = globScan(base.absolute, args.glob ?? "**/*", 5000);
     const results: string[] = [];
-    for await (const file of glob.scan({ cwd: base.absolute, dot: false })) {
-      if (file.includes("node_modules/") || file.startsWith(".git/")) continue;
+    for (const file of files) {
+      if (results.length >= 200) break;
       try {
-        const text = await Bun.file(`${base.absolute}/${file}`).text();
+        const text = readFileSync(join(base.absolute, file), "utf8");
         const lines = text.split("\n");
         for (let i = 0; i < lines.length && results.length < 200; i++) {
           if (regex.test(lines[i]!)) results.push(`${file}:${i + 1}:${lines[i]!.slice(0, 300)}`);
@@ -56,7 +59,6 @@ export const grepTool = defineTool({
       } catch {
         // Binary or unreadable file — skip.
       }
-      if (results.length >= 200) break;
     }
     return {
       title: args.pattern,

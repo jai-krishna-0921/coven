@@ -82,6 +82,11 @@ export class SessionStore {
     this.persistMessages(message.sessionID);
   }
 
+  /** Re-persist a session's messages after in-place part mutations (e.g. pruning). */
+  persist(sessionID: string): void {
+    this.persistMessages(sessionID);
+  }
+
   private dirOf(sessionID: string): string {
     return join(this.baseDir, sessionID);
   }
@@ -103,19 +108,29 @@ export class SessionStore {
     const dir = this.dirOf(sessionID);
     const infoPath = join(dir, "info.json");
     if (!existsSync(infoPath)) return;
+    let info: SessionInfo;
     try {
-      const info = JSON.parse(readFileSync(infoPath, "utf8")) as SessionInfo;
-      this.sessions.set(sessionID, info);
-      const messagesPath = join(dir, "messages.jsonl");
-      const messages: Message[] = existsSync(messagesPath)
-        ? readFileSync(messagesPath, "utf8")
-            .split("\n")
-            .filter(Boolean)
-            .map((line) => JSON.parse(line) as Message)
-        : [];
-      this.messages.set(sessionID, messages);
+      info = JSON.parse(readFileSync(infoPath, "utf8")) as SessionInfo;
     } catch {
-      // Corrupt session directory — skip it rather than crash startup.
+      return; // Unreadable info.json — treat the session as absent.
     }
+    this.sessions.set(sessionID, info);
+
+    // Parse messages line-by-line and KEEP the valid ones. A single truncated
+    // trailing line (interrupted write) must not erase the whole history — if
+    // we returned [] here, the next append would rewrite the file and destroy it.
+    const messages: Message[] = [];
+    const messagesPath = join(dir, "messages.jsonl");
+    if (existsSync(messagesPath)) {
+      const lines = readFileSync(messagesPath, "utf8").split("\n").filter(Boolean);
+      for (const line of lines) {
+        try {
+          messages.push(JSON.parse(line) as Message);
+        } catch {
+          // Skip one corrupt line rather than discard every message.
+        }
+      }
+    }
+    this.messages.set(sessionID, messages);
   }
 }

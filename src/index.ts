@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * coven — CLI entry.
  *
@@ -6,12 +6,76 @@
  *   coven run -p "prompt"       one-shot print mode (--agent, --yes)
  *   coven agents                list agents
  *   coven skills                list skills
+ *   coven models [provider]     list the model catalog
+ *   coven auth login|list|logout [provider]   BYOK credentials
  */
+import * as readline from "node:readline";
+import { AuthStore, ENV_KEYS } from "./auth/index.ts";
+import { ModelCatalog } from "./catalog/index.ts";
 import { createApp } from "./app.ts";
 import { Tui } from "./tui/index.ts";
-import { bold, dim, green, red, yellow } from "./util/ansi.ts";
+import { bold, cyan, dim, green, red, yellow } from "./util/ansi.ts";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
+
+function ask(prompt: string): Promise<string> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) =>
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    }),
+  );
+}
+
+async function authCommand(positional: string[]): Promise<void> {
+  const auth = new AuthStore();
+  const [, sub = "list", providerArg] = positional;
+  if (sub === "list" || sub === "ls") {
+    const entries = auth.entries();
+    if (entries.length === 0) {
+      console.log(dim("no credentials — run: coven auth login <provider>"));
+      console.log(dim(`known env vars: ${Object.values(ENV_KEYS).join(", ")}`));
+      return;
+    }
+    for (const entry of entries) {
+      console.log(`${green("●")} ${bold(entry.provider.padEnd(14))} ${dim(`${entry.masked} (${entry.source})`)}`);
+    }
+    return;
+  }
+  if (sub === "login") {
+    const provider = providerArg ?? (await ask(`provider (${Object.keys(ENV_KEYS).join("/")} or custom): `));
+    if (!provider) return;
+    const key = await ask(`API key for ${provider}: `);
+    if (!key) return;
+    auth.set(provider, key);
+    console.log(`${green("✓")} stored credential for ${bold(provider)} ${dim("(~/.local/share/coven/auth.json, mode 0600)")}`);
+    return;
+  }
+  if (sub === "logout") {
+    const provider = providerArg ?? (await ask("provider to remove: "));
+    const removed = auth.remove(provider);
+    console.log(removed ? `${green("✓")} removed ${provider}` : `${red("✗")} no stored credential for ${provider}`);
+    return;
+  }
+  console.log("usage: coven auth [list|login <provider>|logout <provider>]");
+}
+
+async function modelsCommand(providerFilter?: string): Promise<void> {
+  const catalog = await ModelCatalog.load();
+  const models = catalog.list(providerFilter);
+  if (models.length === 0) {
+    console.log(dim(providerFilter ? `no models for provider "${providerFilter}"` : "catalog empty"));
+    return;
+  }
+  models.sort((a, b) => a.providerID.localeCompare(b.providerID) || (b.releaseDate ?? "").localeCompare(a.releaseDate ?? ""));
+  for (const model of models.slice(0, 60)) {
+    const ctx = model.contextLimit >= 1_000_000 ? `${model.contextLimit / 1_000_000}M` : `${Math.round(model.contextLimit / 1000)}k`;
+    const price = model.cost.input > 0 ? `$${model.cost.input}/${model.cost.output} per 1M` : "free/local";
+    console.log(`${cyan("○")} ${bold(`${model.providerID}/${model.modelID}`.padEnd(46))} ${dim(`${ctx} ctx · ${price}`)}`);
+  }
+  if (models.length > 60) console.log(dim(`… ${models.length - 60} more — filter with: coven models <provider>`));
+}
 
 function parseFlags(args: string[]): { flags: Map<string, string | true>; positional: string[] } {
   const flags = new Map<string, string | true>();
@@ -77,9 +141,12 @@ Usage:
   coven run -p "<prompt>"    one-shot mode (--agent <name>, --yes to auto-approve)
   coven agents               list available agents
   coven skills               list discovered skills
+  coven models [provider]    browse the model catalog (models.dev + fallback)
+  coven auth login <prov>    store an API key (BYOK) — also list / logout
 
 Config: coven.json (project) / ~/.config/coven/coven.json (global)
-Env:    ANTHROPIC_API_KEY (or provider-specific key envs)`);
+Keys:   env vars (ANTHROPIC_API_KEY, …) or coven auth login
+Voice:  /voice in the TUI (say / espeak / piper / PowerShell / OpenAI TTS)`);
     return;
   }
 
@@ -95,6 +162,14 @@ Env:    ANTHROPIC_API_KEY (or provider-specific key envs)`);
     const skills = app.skills.all();
     if (skills.length === 0) console.log(dim("no skills discovered (.coven/skills, .claude/skills, ~/.config/coven/skills)"));
     for (const skill of skills) console.log(`${yellow("◆")} ${bold(skill.name)} — ${skill.description}`);
+    return;
+  }
+  if (command === "auth") {
+    await authCommand(positional);
+    return;
+  }
+  if (command === "models") {
+    await modelsCommand(positional[1]);
     return;
   }
   if (command === "run") {
