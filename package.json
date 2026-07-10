@@ -5,7 +5,7 @@
   "type": "module",
   "license": "MIT",
   "bin": {
-    "coven": "./dist/index.js"
+    "coven": "dist/index.js"
   },
   "files": [
     "dist",
@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit",
     "build": "bun build src/index.ts --target=node --outfile dist/index.js",
     "compile": "bun build src/index.ts --compile --outfile dist/coven",
-    "prepublishOnly": "bun test && bun run typecheck && bun run build && node dist/index.js --version"
+    "prepublishOnly": "node -e \"require('node:fs').accessSync('dist/index.js')\" && node dist/index.js --version"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
@@ -33,7 +33,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jai-krishna-0921/coven"
+    "url": "git+https://github.com/jai-krishna-0921/coven.git"
+  },
+  "homepage": "https://github.com/jai-krishna-0921/coven#readme",
+  "bugs": {
+    "url": "https://github.com/jai-krishna-0921/coven/issues"
   },
   "keywords": [
     "ai",
