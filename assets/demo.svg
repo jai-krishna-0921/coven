@@ -1,0 +1,35 @@
+<svg width="820" height="486" viewBox="0 0 820 486" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="coven terminal session">
+  <style>
+    text { font-family: 'SFMono-Regular', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace; font-size: 15px; white-space: pre; }
+    .m  { fill: #e879f9; } .mb { fill: #e879f9; font-weight: 700; }
+    .g  { fill: #4ade80; } .c  { fill: #38bdf8; } .y { fill: #fbbf24; }
+    .w  { fill: #e6edf3; } .d  { fill: #7d8590; } .gray { fill: #6b7280; }
+  </style>
+  <rect x="8" y="8" width="804" height="470" rx="12" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <path d="M8 20 a12 12 0 0 1 12 -12 h780 a12 12 0 0 1 12 12 v26 h-804 Z" fill="#161b22"/>
+  <circle cx="30" cy="27" r="6" fill="#ff5f56"/>
+  <circle cx="50" cy="27" r="6" fill="#ffbd2e"/>
+  <circle cx="70" cy="27" r="6" fill="#27c93f"/>
+  <text x="410" y="32" text-anchor="middle" class="d">coven</text>
+
+  <text x="26" y="80" xml:space="preserve"><tspan class="mb" style="font-size:19px">✦ coven</tspan><tspan class="d">   a coven of coding agents in your terminal</tspan></text>
+  <text x="26" y="106" xml:space="preserve"><tspan class="d">model: </tspan><tspan class="w">anthropic/claude-opus-4-8</tspan><tspan class="d">   agent: </tspan><tspan class="g">conductor</tspan><tspan class="d">   skills: 10</tspan></text>
+
+  <text x="26" y="150" xml:space="preserve"><tspan class="m">coven</tspan><tspan class="d">(conductor)</tspan><tspan class="gray"> ❯ </tspan><tspan class="w">add a debounce util with tests, then review it</tspan></text>
+
+  <text x="26" y="182" xml:space="preserve"><tspan class="m">◈ researcher</tspan><tspan class="d"> ⟩ scout existing utils</tspan></text>
+  <text x="42" y="208" xml:space="preserve"><tspan class="g">✓</tspan><tspan class="w"> grep </tspan><tspan class="d">/debounce|throttle/  ·  no matches</tspan></text>
+
+  <text x="26" y="240" xml:space="preserve"><tspan class="m">◈ builder</tspan><tspan class="d"> ⟩ implement debounce, test-first</tspan></text>
+  <text x="42" y="266" xml:space="preserve"><tspan class="g">✓</tspan><tspan class="w"> write </tspan><tspan class="d">test/debounce.test.ts  (24 lines)</tspan></text>
+  <text x="42" y="292" xml:space="preserve"><tspan class="g">✓</tspan><tspan class="w"> write </tspan><tspan class="d">src/util/debounce.ts  (18 lines)</tspan></text>
+  <text x="42" y="318" xml:space="preserve"><tspan class="g">✓</tspan><tspan class="w"> bash </tspan><tspan class="d">bun test debounce  ·  </tspan><tspan class="g">6 pass</tspan><tspan class="d">   480ms</tspan></text>
+
+  <text x="26" y="350" xml:space="preserve"><tspan class="m">◈ reviewer</tspan><tspan class="d"> ⟩ spec compliance + code quality</tspan></text>
+  <text x="42" y="376" xml:space="preserve"><tspan class="y">⚠</tspan><tspan class="w"> permission </tspan><tspan class="c">bash</tspan><tspan class="d"> → git diff</tspan><tspan class="gray">    [y]es  [a]lways  [n]o</tspan></text>
+
+  <text x="26" y="414" xml:space="preserve"><tspan class="w">Added </tspan><tspan class="c">debounce()</tspan><tspan class="w"> with a leading-edge option and 6 tests — all green.</tspan></text>
+  <text x="26" y="440" xml:space="preserve"><tspan class="w">Reviewer: </tspan><tspan class="g">no Critical findings</tspan><tspan class="w">; one Minor (name the timer). Ready to merge.</tspan></text>
+
+  <text x="26" y="466" class="d">─ 12.4k↑ 380↓ · ctx 7% · 2¢ · 5.1s ─</text>
+</svg>
