@@ -13,7 +13,7 @@ import * as readline from "node:readline";
 import { AuthStore, ENV_KEYS } from "./auth/index.ts";
 import { ModelCatalog } from "./catalog/index.ts";
 import { createApp } from "./app.ts";
-import { Tui } from "./tui/index.ts";
+import { runTui } from "./tui/index.ts";
 import { bold, cyan, dim, green, red, yellow } from "./util/ansi.ts";
 
 const VERSION = "0.2.0";
@@ -183,7 +183,11 @@ Voice:  /voice in the TUI (say / espeak / piper / PowerShell / OpenAI TTS)`);
   }
 
   const app = await createApp();
-  await new Tui(app).run();
+  try {
+    await runTui(app);
+  } finally {
+    await app.dispose();
+  }
 }
 
 main().catch((error) => {
