@@ -38,7 +38,14 @@ function makeCtx(prefs: UiPrefs = { ...DEFAULT_PREFS }) {
 
   const app = {
     engine: { setModel: setModelSpy },
-    catalog: { list: () => CATALOG, get: () => CATALOG[0] },
+    catalog: {
+      list: () => CATALOG,
+      get: () => CATALOG[0],
+      providers: () => [
+        { id: "anthropic", name: "Anthropic", env: ["ANTHROPIC_API_KEY"] },
+        { id: "openai", name: "OpenAI", env: ["OPENAI_API_KEY"] },
+      ],
+    },
     auth: { resolveKey: (provider: string) => (provider === "anthropic" ? { key: "sk-x", source: "env" as const } : undefined) },
     bus: { publish: () => {} },
   } as unknown as App;

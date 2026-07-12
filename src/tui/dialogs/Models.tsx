@@ -33,9 +33,15 @@ function modelRow(model: CatalogModelLike, check: string | undefined): SelectOpt
 export function Models({ ctx }: { ctx: CommandContext }) {
   const { icons } = useTheme();
   const models = ctx.app.catalog?.list() ?? [];
-  const options: SelectOption[] = models.map((model) =>
-    modelRow(model, ctx.app.auth?.resolveKey(model.providerID) ? icons.ok : undefined),
+  // A provider is "ready" if a key resolves OR it is keyless-local (empty env,
+  // e.g. Ollama) — so local models aren't misleadingly shown as un-connected.
+  const keyless = new Set(
+    (ctx.app.catalog?.providers() ?? []).filter((p) => p.env.length === 0).map((p) => p.id),
   );
+  const options: SelectOption[] = models.map((model) => {
+    const ready = keyless.has(model.providerID) || ctx.app.auth?.resolveKey(model.providerID) !== undefined;
+    return modelRow(model, ready ? icons.ok : undefined);
+  });
 
   return (
     <SelectDialog

@@ -1,5 +1,5 @@
 import { describe, expect, test, mock } from "bun:test";
-import { buildPaletteItems, resolveSlash, runCommandSubtask } from "../../src/tui/commands.ts";
+import { buildPaletteItems, resolveSlash, runCommandSubtask, listConnectors } from "../../src/tui/commands.ts";
 import type { CommandContext, PaletteItem } from "../../src/tui/types.ts";
 
 describe("resolveSlash", () => {
@@ -52,6 +52,7 @@ function makeCtx(defs: CommandDef[] = [initDef]) {
   const expandSpy = mock(async (def: CommandDef, rawArgs: string): Promise<string> =>
     def.template.replace("$ARGUMENTS", rawArgs));
 
+  const setKeySpy = mock((_provider: string, _key: string): void => {});
   const app = {
     loaded: { root: "/tmp/coven-test" },
     store: { create: createSpy, get: () => undefined, update: () => {} },
@@ -60,6 +61,20 @@ function makeCtx(defs: CommandDef[] = [initDef]) {
     bus: { publish: () => {} },
     providers: { invalidate: () => {} },
     tts: { backend: "say", enabled: false },
+    catalog: {
+      providers: () => [
+        { id: "anthropic", name: "Anthropic", env: ["ANTHROPIC_API_KEY"] },
+        { id: "openai", name: "OpenAI", env: ["OPENAI_API_KEY"] },
+        { id: "ollama", name: "Ollama", env: [] },
+      ],
+      list: () => [],
+      get: () => ({}),
+    },
+    auth: {
+      resolveKey: (id: string) => (id === "anthropic" ? { key: "sk-live", source: "env" as const } : undefined),
+      set: setKeySpy,
+      entries: () => [],
+    },
   } as unknown as App;
 
   const sendSpy = mock(async (_text: string, _override?: { agent?: string; model?: string }): Promise<void> => {});
@@ -92,7 +107,7 @@ function makeCtx(defs: CommandDef[] = [initDef]) {
     setPrefs: () => {},
   };
 
-  return { ctx, createSpy, setModelSpy, promptSpy, expandSpy, sendSpy, appendSyntheticSpy, toastSpy, openModalSpy, setSessionIDSpy };
+  return { ctx, createSpy, setModelSpy, promptSpy, expandSpy, sendSpy, appendSyntheticSpy, toastSpy, openModalSpy, setSessionIDSpy, setKeySpy };
 }
 
 describe("buildPaletteItems", () => {
@@ -129,6 +144,50 @@ describe("buildPaletteItems", () => {
     expect(createSpy.mock.calls[0]?.[0]?.parentID).toBe("parent1");
     expect(appendSyntheticSpy).toHaveBeenCalledTimes(1);
     expect(appendSyntheticSpy.mock.calls[0]?.[0]?.sessionID).toBe("parent1");
+  });
+});
+
+describe("listConnectors", () => {
+  test("marks a keyless provider (ollama) as ready, a keyed provider by its env key, and an unconfigured one as not ready", () => {
+    const { ctx } = makeCtx();
+    const list = listConnectors(ctx);
+    const ollama = list.find((c) => c.id === "ollama");
+    const anthropic = list.find((c) => c.id === "anthropic");
+    const openai = list.find((c) => c.id === "openai");
+
+    expect(ollama).toMatchObject({ keyless: true, ready: true });
+    expect(anthropic).toMatchObject({ keyless: false, ready: true, source: "env", envVar: "ANTHROPIC_API_KEY" });
+    expect(openai).toMatchObject({ keyless: false, ready: false, envVar: "OPENAI_API_KEY" });
+  });
+});
+
+describe("connector commands", () => {
+  test("/login opens the connectors picker", () => {
+    const { ctx, openModalSpy } = makeCtx();
+    buildPaletteItems(ctx).find((i) => i.id === "auth.login")!.run(ctx);
+    expect(openModalSpy).toHaveBeenCalledWith("connectors");
+  });
+
+  test("/connectors opens the connectors picker", () => {
+    const { ctx, openModalSpy } = makeCtx();
+    buildPaletteItems(ctx).find((i) => i.id === "connectors")!.run(ctx);
+    expect(openModalSpy).toHaveBeenCalledWith("connectors");
+  });
+
+  test("/model <ref> sets that exact model ref on the session", async () => {
+    const { ctx, setModelSpy, openModalSpy } = makeCtx();
+    const item = buildPaletteItems(ctx).find((i) => i.id === "model.set");
+    expect(item).toBeTruthy();
+    await item!.run(ctx, "ollama/llama3.2");
+    expect(setModelSpy).toHaveBeenCalledWith("parent1", "ollama/llama3.2");
+    expect(openModalSpy).not.toHaveBeenCalled();
+  });
+
+  test("/model with no args opens the model picker", async () => {
+    const { ctx, setModelSpy, openModalSpy } = makeCtx();
+    await buildPaletteItems(ctx).find((i) => i.id === "model.set")!.run(ctx, "");
+    expect(setModelSpy).not.toHaveBeenCalled();
+    expect(openModalSpy).toHaveBeenCalledWith("models");
   });
 });
 

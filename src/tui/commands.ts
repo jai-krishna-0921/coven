@@ -9,10 +9,43 @@
  * attach, export, interrupt, quit) are reached through `ctx.host.*` so this
  * module stays free of terminal/process concerns.
  */
-import { ENV_KEYS } from "../auth/index.ts";
 import type { CommandDefLike } from "../app.ts";
 import { THEMES } from "./theme.ts";
 import type { CommandContext, PaletteCategory, PaletteItem } from "./types.ts";
+
+const RECENT_CAP = 8;
+
+/**
+ * A provider's connect-status for the Connectors picker (§ Auth). Derived from
+ * the live catalog + auth store — no stubs. `keyless` providers (empty `env`,
+ * e.g. local Ollama) need no API key at all; keyed providers are `ready` only
+ * once a key resolves from an env var or auth.json.
+ */
+export interface ConnectorInfo {
+  id: string;
+  name: string;
+  keyless: boolean;
+  ready: boolean;
+  source?: "env" | "auth.json";
+  envVar?: string;
+}
+
+/** Build the connector list from `catalog.providers()` + `auth.resolveKey()`. */
+export function listConnectors(ctx: CommandContext): ConnectorInfo[] {
+  const providers = ctx.app.catalog?.providers() ?? [];
+  return providers.map((p) => {
+    const keyless = p.env.length === 0;
+    const resolved = ctx.app.auth?.resolveKey(p.id);
+    return {
+      id: p.id,
+      name: p.name,
+      keyless,
+      ready: keyless || resolved !== undefined,
+      source: resolved?.source,
+      envVar: p.env[0],
+    };
+  });
+}
 
 /**
  * Run a `subtask: true` command in a child session (§9.2). The child's events
@@ -121,6 +154,19 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
 
     // ---- Model / Agent ----
     { id: "model.picker", title: "Model picker", slash: "models", category: "Model", keybinding: "ctrl+o", run: (c) => c.openModal("models") },
+    {
+      id: "model.set", title: "Set model by ref", slash: "model", category: "Model",
+      run: (c, args) => {
+        const ref = (args ?? "").trim();
+        if (!ref) {
+          c.openModal("models");
+          return;
+        }
+        c.app.engine.setModel(c.session.id, ref);
+        c.setPrefs({ recentModels: [ref, ...c.prefs.recentModels.filter((m) => m !== ref)].slice(0, RECENT_CAP) });
+        c.toast(`Model → ${ref}`, "success");
+      },
+    },
     { id: "agent.picker", title: "Agent picker", slash: "agents", category: "Agent", keybinding: "ctrl+g", run: (c) => c.openModal("agents") },
 
     // ---- Theme / View ----
@@ -148,25 +194,8 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
     { id: "file.attach", title: "Attach file", slash: "attach", category: "Prompt", keybinding: "ctrl+f", run: (c) => c.host.attachFile() },
 
     // ---- Auth ----
-    {
-      id: "auth.login", title: "Login", slash: "login", category: "Auth",
-      run: (c) => {
-        // The full provider picker (a SelectDialog over Object.keys(ENV_KEYS)) is
-        // wired in Task 43; until it exists, target the active session's provider.
-        const provider = c.session.model?.split("/")[0] ?? Object.keys(ENV_KEYS)[0] ?? "anthropic";
-        c.openModal("prompt", {
-          kind: "login",
-          message: `API key for ${provider}`,
-          onSubmit: (key) => {
-            c.app.auth?.set(provider, key);
-            c.app.providers.invalidate(provider);
-            c.toast(`Saved ${provider} key`, "success");
-            c.closeModal();
-          },
-        });
-      },
-    },
-    { id: "connectors", title: "Connectors", slash: "connectors", category: "Auth", run: (c) => c.openModal("status") },
+    { id: "auth.login", title: "Login / add provider key", slash: "login", category: "Auth", run: (c) => c.openModal("connectors") },
+    { id: "connectors", title: "Connectors", slash: "connectors", category: "Auth", run: (c) => c.openModal("connectors") },
   ];
 
   // ---- Template commands (§9.2 step 2) ----

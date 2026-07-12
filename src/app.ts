@@ -55,6 +55,7 @@ export interface CatalogModelLike {
 export interface CatalogLike {
   get(providerID: string, modelID: string): CatalogModelLike;
   list(providerID?: string): CatalogModelLike[];
+  providers(): { id: string; name: string; env: string[] }[];
 }
 
 export interface AuthLike {

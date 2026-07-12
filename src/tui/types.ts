@@ -8,7 +8,8 @@ import type { UiPrefs } from "./prefs.ts";
 
 export type ModalKind =
   | "palette" | "help" | "whichkey" | "sessions" | "models" | "agents"
-  | "themes" | "skills" | "permission" | "status" | "confirm" | "prompt";
+  | "themes" | "skills" | "permission" | "status" | "confirm" | "prompt"
+  | "connectors";
 export type ToastKind = "info" | "success" | "warn" | "error";
 export type PaletteCategory =
   | "System" | "Session" | "Model" | "Agent" | "Theme" | "View"

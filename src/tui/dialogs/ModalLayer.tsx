@@ -20,6 +20,7 @@ import { Agents } from "./Agents.tsx";
 import { Themes } from "./Themes.tsx";
 import { Skills } from "./Skills.tsx";
 import { Status } from "./Status.tsx";
+import { Connectors } from "./Connectors.tsx";
 import { Permission } from "./Permission.tsx";
 import { Prompt } from "./Prompt.tsx";
 import { Confirm } from "./Confirm.tsx";
@@ -34,6 +35,8 @@ function renderDialog(kind: ModalKind | undefined, props: ModalProps | undefined
       return <Help ctx={ctx} />;
     case "status":
       return <Status ctx={ctx} />;
+    case "connectors":
+      return <Connectors ctx={ctx} />;
     case "skills":
       return <Skills ctx={ctx} />;
     case "sessions":
