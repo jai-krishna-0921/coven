@@ -23,7 +23,7 @@ import type { PluginHost } from "../plugin/index.ts";
 import { ToolRegistry } from "../tool/registry.ts";
 import { toJsonSchema, truncateOutput, type ToolContext, type ToolDef, type ToolResult } from "../tool/types.ts";
 import { createId } from "../util/id.ts";
-import { NamedError, PermissionDeniedError, PermissionRejectedError } from "../util/error.ts";
+import { NamedError, PermissionDeniedError, PermissionRejectedError, SessionError } from "../util/error.ts";
 import { createLogger } from "../util/log.ts";
 import {
   buildSummaryPrompt,
@@ -38,7 +38,7 @@ import {
 } from "./context.ts";
 import { SessionStore } from "./store.ts";
 import { assembleSystemPrompt } from "./system.ts";
-import { addUsage, type Message, type Part, type Usage } from "./types.ts";
+import { addUsage, type Message, type Part, type SessionInfo, type Usage } from "./types.ts";
 
 const log = createLogger("loop");
 
@@ -183,6 +183,30 @@ export class SessionEngine {
 
   private meta(providerID: string, modelID: string): ModelMeta {
     return this.o.modelMeta?.(providerID, modelID) ?? DEFAULT_META;
+  }
+
+  /** Persist a per-session model override ("provider/model-id") and announce it. */
+  setModel(sessionID: string, modelRef: string): SessionInfo {
+    if (!modelRef.includes("/")) throw new SessionError(`Invalid model ref "${modelRef}"`);
+    const session = this.o.store.get(sessionID);
+    if (!session) throw new SessionError(`No session ${sessionID}`);
+    const next = { ...session, model: modelRef };
+    this.o.store.update(next);
+    this.o.bus.publish({ type: "session.updated", session: next });
+    return next;
+  }
+
+  /** Switch the session's driving agent (user-selectable agents only) and announce it. */
+  setAgent(sessionID: string, agentName: string): SessionInfo {
+    const agent = this.o.agents.get(agentName);
+    if (!agent || agent.hidden || agent.mode === "subagent")
+      throw new SessionError(`Agent "${agentName}" is not user-selectable`);
+    const session = this.o.store.get(sessionID);
+    if (!session) throw new SessionError(`No session ${sessionID}`);
+    const next = { ...session, agent: agentName };
+    this.o.store.update(next);
+    this.o.bus.publish({ type: "session.updated", session: next });
+    return next;
   }
 
   private async runLoop(

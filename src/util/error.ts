@@ -63,3 +63,10 @@ export class ProviderError extends NamedError {
     super(`Provider "${provider}": ${detail}`);
   }
 }
+
+export class SessionError extends NamedError {
+  override readonly name = "SessionError";
+  constructor(readonly detail: string) {
+    super(detail);
+  }
+}
