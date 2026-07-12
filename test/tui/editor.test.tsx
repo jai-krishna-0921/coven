@@ -132,6 +132,8 @@ function renderEditor(opts: {
   onSubmit?: (t: string) => void;
   onShell?: (c: string) => void;
   onPopoverChange?: (o: boolean) => void;
+  onEmptyChange?: (e: boolean) => void;
+  registerClear?: (fn: () => void) => void;
 }) {
   return render(
     <ThemeProvider prefs={DEFAULT_PREFS}>
@@ -141,6 +143,8 @@ function renderEditor(opts: {
         onSubmit={opts.onSubmit ?? (() => {})}
         onShell={opts.onShell ?? (() => {})}
         onPopoverChange={opts.onPopoverChange}
+        onEmptyChange={opts.onEmptyChange}
+        registerClear={opts.registerClear}
       />
     </ThemeProvider>,
   );
@@ -192,5 +196,33 @@ describe("PromptEditor", () => {
     stdin.write("\r");
     await tick();
     expect(shelled).toEqual(["ls"]);
+  });
+
+  test("onEmptyChange reports typing and backspace-to-empty; registerClear clears", async () => {
+    const empties: boolean[] = [];
+    const onEmptyChange = (e: boolean): void => {
+      empties.push(e);
+    };
+    let clearFn: (() => void) | null = null;
+    const registerClear = (fn: () => void): void => {
+      clearFn = fn;
+    };
+    const { stdin, lastFrame } = renderEditor({ onEmptyChange, registerClear });
+    await tick();
+    expect(empties.at(-1)).toBe(true); // starts empty
+    stdin.write("h");
+    await tick();
+    expect(empties.at(-1)).toBe(false); // non-empty after typing
+    stdin.write("\x7f"); // backspace (DEL) → back to empty
+    await tick();
+    expect(empties.at(-1)).toBe(true);
+    stdin.write("xy");
+    await tick();
+    expect(empties.at(-1)).toBe(false);
+    expect(clearFn).not.toBeNull();
+    clearFn!();
+    await tick();
+    expect(empties.at(-1)).toBe(true); // registered clear empties the buffer
+    expect(lastFrame() ?? "").not.toContain("xy");
   });
 });

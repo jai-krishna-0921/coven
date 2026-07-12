@@ -35,12 +35,16 @@ export function PromptEditor({
   onShell,
   active,
   onPopoverChange,
+  onEmptyChange,
+  registerClear,
 }: {
   items: PaletteItem[];
   onSubmit(text: string): void;
   onShell(cmd: string): void;
   active: boolean;
   onPopoverChange?(open: boolean): void;
+  onEmptyChange?(empty: boolean): void;
+  registerClear?(clear: () => void): void;
 }) {
   const { theme, icons } = useTheme();
   const bufferRef = useRef<TextBuffer | null>(null);
@@ -74,6 +78,23 @@ export function PromptEditor({
   useEffect(() => {
     onPopoverChange?.(open);
   }, [open, onPopoverChange]);
+
+  // Report real buffer emptiness (incl. backspace-to-empty) so the App can re-arm
+  // empty-buffer keybindings (? help, tab agent-cycle, ctrl+d quit) precisely.
+  const empty = buffer.isEmpty();
+  useEffect(() => {
+    onEmptyChange?.(empty);
+  }, [empty, onEmptyChange]);
+
+  // Expose a precise clear to the App (ctrl-c "clear input") instead of a remount.
+  useEffect(() => {
+    registerClear?.(() => {
+      buffer.setValue("");
+      dismissedRef.current = false;
+      selRef.current = 0;
+      bump();
+    });
+  }, [registerClear, buffer, bump]);
 
   // Best-effort hardware-cursor placement (editor-relative y; App refines absolute).
   useEffect(() => {

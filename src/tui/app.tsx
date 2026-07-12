@@ -170,6 +170,16 @@ function AppShell({
     popoverOpenRef.current = open;
   }, []);
 
+  // The editor reports its real emptiness (incl. backspace-to-empty), so empty-buffer
+  // keybindings (? help, tab agent-cycle, ctrl+d quit) re-arm precisely.
+  const clearFnRef = useRef<(() => void) | null>(null);
+  const onEmptyChange = useCallback((empty: boolean): void => {
+    bufferEmptyRef.current = empty;
+  }, []);
+  const registerClear = useCallback((fn: () => void): void => {
+    clearFnRef.current = fn;
+  }, []);
+
   const onboarding = !prefs.onboarded || state.reonboarding;
   const bannerRows = state.connectorReady ? 0 : BANNER_ROWS;
   const transcriptHeight = Math.max(3, rows - HEADER_ROWS - FOOTER_ROWS - EDITOR_ROWS - bannerRows);
@@ -180,7 +190,8 @@ function AppShell({
 
   const clearInput = (): void => {
     bufferEmptyRef.current = true;
-    setEditorEpoch((epoch) => epoch + 1);
+    if (clearFnRef.current) clearFnRef.current();
+    else setEditorEpoch((epoch) => epoch + 1); // fallback if the editor hasn't registered yet
   };
 
   const send = async (text: string, override?: { agent?: string; model?: string }): Promise<void> => {
@@ -432,6 +443,8 @@ function AppShell({
         items={items}
         active={inputActive}
         onPopoverChange={onPopoverChange}
+        onEmptyChange={onEmptyChange}
+        registerClear={registerClear}
         onSubmit={(text) => {
           bufferEmptyRef.current = true;
           void send(text);
