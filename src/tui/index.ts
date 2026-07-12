@@ -1,12 +1,21 @@
 /**
- * The Coven terminal interface — a streaming REPL.
- * Renders bus events live (text deltas, tool activity with timings, diff
- * previews), queues permission prompts, and handles slash commands, `!`
- * shell escapes, and `@file` attachments.
+ * The Coven terminal interface.
+ *
+ * `runTui(app)` is the entry point: it mounts the full-screen Ink {@link AppRoot}
+ * when both stdout and stdin are TTYs, and otherwise falls back to the plain
+ * line-oriented {@link runFallbackRepl}. It never `process.exit`s while Ink is
+ * mounted — the alt-screen restore must run — and never disposes `app` itself
+ * (the CLI entry owns `app.dispose()`). The TTY/mount/fallback seams are
+ * injectable so the routing is unit-testable without a real terminal.
+ *
+ * The legacy streaming {@link Tui} class below is retained only until the CLI is
+ * rewired to `runTui`; it is removed once `src/index.ts` no longer references it.
  */
 import { writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
+import { createElement } from "react";
+import { render } from "ink";
 import type { App } from "../app.ts";
 import type { SessionInfo } from "../session/types.ts";
 import type { PermissionRequest } from "../permission/types.ts";
@@ -17,6 +26,8 @@ import { scanBashCommand } from "../tool/bash-scan.ts";
 import { spawnCapture } from "../util/proc.ts";
 import { DEFAULT_MODEL } from "../config/schema.ts";
 import { INPUT_EOF, InputReader } from "./input.ts";
+import { App as AppRoot } from "./app.tsx";
+import { runFallbackRepl } from "./fallback.ts";
 import {
   BANNER,
   Spinner,
@@ -28,6 +39,42 @@ import {
   statusLine,
   toolFinishLine,
 } from "./render.ts";
+
+/** Injectable seams so `runTui`'s routing is testable without a real terminal. */
+export interface RunTuiDeps {
+  /** Force the TTY decision (defaults to `stdout.isTTY && stdin.isTTY`). */
+  isTTY?: boolean;
+  /** Override the non-TTY branch (defaults to {@link runFallbackRepl}). */
+  fallback?: (app: App) => Promise<void>;
+  /** Override the Ink mount branch (defaults to {@link mountInk}). */
+  mount?: (app: App) => Promise<void>;
+}
+
+/** Mount the full-screen Ink app in the alternate screen; unmount before rethrow. */
+async function mountInk(app: App): Promise<void> {
+  const instance = render(createElement(AppRoot, { app }), { alternateScreen: true, exitOnCtrlC: false });
+  try {
+    await instance.waitUntilExit();
+  } catch (error) {
+    instance.unmount(); // never leave the alt screen mounted on a crash
+    throw error;
+  }
+}
+
+/**
+ * Launch the interactive UI. Mounts Ink on a real TTY, else runs the plain-text
+ * fallback REPL (piped stdin / CI / dumb terminals). Resolves when the UI exits.
+ */
+export async function runTui(app: App, deps: RunTuiDeps = {}): Promise<void> {
+  const interactive = deps.isTTY ?? Boolean(process.stdout.isTTY && process.stdin.isTTY);
+  const fallback = deps.fallback ?? runFallbackRepl;
+  const mount = deps.mount ?? mountInk;
+  if (!interactive) {
+    await fallback(app);
+    return;
+  }
+  await mount(app);
+}
 
 interface ToolTrack {
   tool: string;
