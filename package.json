@@ -1,6 +1,6 @@
 {
   "name": "thecoven",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A coven of coding agents in your terminal — multi-agent, skill-driven, guarded.",
   "type": "module",
   "license": "MIT",
@@ -16,16 +16,22 @@
     "dev": "bun run src/index.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun build src/index.ts --target=node --outfile dist/index.js",
+    "build": "bun build src/index.ts --target=node --outfile dist/index.js --external ink --external react --external react/jsx-runtime --external fuzzysort",
     "compile": "bun build src/index.ts --compile --outfile dist/coven",
     "prepublishOnly": "node -e \"require('node:fs').accessSync('dist/index.js')\" && node dist/index.js --version"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
+    "fuzzysort": "^3",
+    "ink": "^7.1.0",
+    "react": "19.2",
+    "react-devtools-core": "^7.0.1",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
+    "@types/react": "19.2",
+    "ink-testing-library": "^4",
     "typescript": "^5.7.0"
   },
   "engines": {

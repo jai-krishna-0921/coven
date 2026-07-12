@@ -4,6 +4,8 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ESNext"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
     "types": ["bun"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
