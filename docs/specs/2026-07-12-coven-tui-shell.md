@@ -57,7 +57,7 @@ not bundled):
 
 | Package | Version | Justification |
 |---|---|---|
-| `ink` | `^7.1.0` | Terminal React reconciler: alternate-screen, flexbox layout (Yoga), `useInput`, `<Static>`, `useWindowSize`, `position:"absolute"` overlays. The chosen engine. |
+| `ink` | `^7.1.0` | Terminal React reconciler: `render(…,{alternateScreen})`, flexbox layout (Yoga), `useInput`, `useWindowSize`, `useCursor`, `position:"absolute"` overlays. Verified present in 7.1.0. The chosen engine. |
 | `react` | `19.2.x` (pinned) | Peer of Ink 7 (`>=19.2.0`). Component model + hooks. |
 | `fuzzysort` | `^3` | Zero-dependency fuzzy matcher for the palette and file/@ autocomplete; returns match indices for highlight. Tiny. |
 
@@ -98,7 +98,7 @@ tui/
   components/
     Header.tsx        logo · model · agent · title
     Home.tsx          splash for empty sessions
-    Transcript.tsx    <Static> completed history + dynamic live message
+    Transcript.tsx    bottom-anchored scroll viewport (history+live) — NO Static (alt-screen has no scrollback)
     Message.tsx       renders one Message (text/reasoning/tool parts)
     ToolLine.tsx      one tool call (spinner→✓/✗, title, timing)
     Diff.tsx          inline unified diff (edit tool)
@@ -202,15 +202,16 @@ one-turn overrides (from a template command's `def.agent`/`def.model`) go throug
 ```ts
 interface UiState {
   session: SessionInfo;            // live copy (id, title, agent, model, usage, cost)
-  history: Message[];              // completed messages (immutable; feeds <Static>)
-  live: Message | null;            // the in-flight assistant message (dynamic tree)
+  history: Message[];              // completed messages (rendered in the scroll viewport)
+  live: Message | null;            // the in-flight assistant message
   status: "idle" | "busy" | "error";
   compacting: boolean;
   context: { tokens: number; usable: number; pct: number };
   permission: PermissionRequest | null;   // head of the ask queue (serialized)
-  modal: { kind: ModalKind; props?: unknown } | null;
+  modal: { kind: ModalKind; props?: ModalProps } | null;
   reonboarding: boolean;           // /onboarding re-run: render the wizard as a full-screen route
   sidebarOverlay: boolean;         // narrow-terminal sidebar shown as a non-capturing overlay
+  scrollOffset: number;            // rows scrolled up from the tail; 0 = following the live tail
   toast: { text: string; kind: ToastKind } | null;   // transient, auto-clears
   changedFiles: string[];          // workspace-relative paths edited/written this session (deduped)
   connectorReady: boolean;         // any resolvable key for the active model's provider
@@ -628,7 +629,7 @@ Render + `stdin.write(key)` + assert `lastFrame()`:
 - Footer shows tokens/pct/cost/model and colors at thresholds.
 - Palette narrows on typed filter; runs selected item.
 - PromptEditor autocomplete popover narrows `/r`→`/ra`; `tab` completes.
-- Transcript renders text/reasoning/tool/diff parts; `<Static>` keeps history.
+- Transcript renders text/reasoning/tool/diff parts in a bottom-anchored scroll viewport (windowed).
 - Permission dialog reply path calls `permissions.reply`.
 - Home splash renders logo + hints when empty.
 - Onboarding step navigation + live preview swaps theme.
@@ -643,9 +644,10 @@ Existing 200 tests must stay green (engine untouched except §5, which gets its 
 
 - `tsconfig.json`: add `"jsx": "react-jsx"`, `"jsxImportSource": "react"`; ensure `.tsx` included.
 - `package.json` build: keep `bun build src/index.ts --target=node --outfile dist/index.js` but add
-  `--external ink --external react --external react-devtools-core --external yoga-layout
-  --external fuzzysort` so the reconciler/native/wasm deps load from `node_modules` at runtime
-  instead of being bundled (avoids yoga-wasm bundling pain). They are runtime `dependencies`, so
+  `--external ink --external react --external react/jsx-runtime --external fuzzysort` — only the
+  packages `src/` imports directly. Once `ink` is external the bundler never enters its transitive
+  deps (react-reconciler, yoga-layout, react-devtools-core, scheduler), so those need no flag; they
+  load from `node_modules` at runtime (and avoid yoga-wasm bundling pain). They are runtime `dependencies`, so
   `npm i -g thecoven` installs them.
 - `files` stays `["dist","README.md","LICENSE"]`; `bin.coven = "dist/index.js"` unchanged.
 - **Verification gate** (must pass before "done"): `bun test` green, `tsc --noEmit` clean,
@@ -665,7 +667,7 @@ Existing 200 tests must stay green (engine untouched except §5, which gets its 
 | Risk | Mitigation |
 |---|---|
 | Bundling Ink/React/Yoga into one node file fails (wasm/native) | Externalize them (§18); ship as real deps. Verify tarball install runs. |
-| Large-transcript re-render storms / flicker | Completed turns in `<Static>`; only `live` dynamic; 25 ms delta coalescing; memoized leaf components. |
+| Large-transcript re-render storms / flicker | Scroll viewport renders only the visible window of messages (not the whole history); 25 ms delta coalescing; memoized `MessageView`. (`<Static>` is unusable here — alt-screen has no scrollback.) |
 | Key conflicts with editor (ctrl+k/e/s) | Fixed table (§10.1); `ctrl+e`=external editor with `End` for line-end; `ctrl+s` works because raw mode clears `IXON`. |
 | Alt-screen strands user on crash/exit | Never `process.exit()` while mounted; `unmount()`/`useApp().exit()` then `waitUntilExit`; wrap root in an error boundary that unmounts first. |
 | Non-TTY / CI | `runTui` TTY guard → fallback REPL; Ink auto-ignores alt-screen when not interactive. |

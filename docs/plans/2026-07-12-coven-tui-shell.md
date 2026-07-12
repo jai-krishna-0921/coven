@@ -76,7 +76,12 @@ Steps:
        extensions, add `tsx`).
 - [ ] 5. Edit `package.json` `scripts.build` to externalize the UI libs so the node bundle stays lean:
 
-    "build": "bun build src/index.ts --target=node --outfile dist/index.js --external ink --external react --external react-dom --external react-reconciler --external yoga-layout --external fuzzysort --external ink-testing-library"
+    "build": "bun build src/index.ts --target=node --outfile dist/index.js --external ink --external react --external react/jsx-runtime --external fuzzysort"
+
+       (Only externalize what `src/` imports directly. Ink's own transitive deps — react-reconciler,
+       yoga-layout, react-devtools-core, scheduler — are NOT entered by the bundler once `ink` is
+       external, so they need no `--external` flag; they resolve from node_modules at runtime.
+       `ink-testing-library` is a devDep never imported by `src/`, so it is never in the bundle graph.)
 
        And bump `"version"` to `"0.3.0"`.
 - [ ] 6. Run: `~/.bun/bin/bun test test/tui/smoke.test.tsx`
@@ -95,14 +100,21 @@ Steps:
 - [ ] 1. Write failing test `test/session-model-field.test.ts`:
 
     import { describe, expect, test } from "bun:test";
+    import { mkdtempSync, rmSync } from "node:fs";
+    import { tmpdir } from "node:os";
+    import { join } from "node:path";
     import { SessionStore } from "../src/session/store.ts";
 
     describe("SessionInfo.model", () => {
-      test("store round-trips a per-session model override", () => {
-        const store = new SessionStore(process.cwd());
+      test("model override round-trips through disk", () => {
+        const data = mkdtempSync(join(tmpdir(), "coven-sess-"));  // SessionStore(root, dataDir?)
+        const store = new SessionStore(process.cwd(), data);
         const s = store.create({ agent: "builder", title: "t" });
         store.update({ ...s, model: "openai/gpt-5.4" });
-        expect(store.get(s.id)?.model).toBe("openai/gpt-5.4");
+        // reload from disk with a fresh instance to prove real persistence:
+        const reloaded = new SessionStore(process.cwd(), data);
+        expect(reloaded.get(s.id)?.model).toBe("openai/gpt-5.4");
+        rmSync(data, { recursive: true, force: true });
       });
     });
 
@@ -206,8 +218,16 @@ Steps:
       return next;
     }
 
-       Use the existing session error class (grep `class .*Error` in `src/session/`); if none,
-       reuse `NamedError` subclass already imported there. Do NOT introduce a bare `throw`.
+       `SessionError` does not exist yet — `src/util/error.ts` only exports the abstract `NamedError`
+       plus permission/config/provider errors. FIRST add to `src/util/error.ts`:
+
+    export class SessionError extends NamedError {
+      override readonly name = "SessionError";
+      constructor(readonly detail: string) { super(detail); }
+    }
+
+       Import it into `src/session/loop.ts` and use it in the snippets above. Do NOT `throw` a bare
+       string, and do NOT reuse `PermissionDeniedError`/`PermissionRejectedError` (wrong semantics).
 - [ ] 4. Run: `~/.bun/bin/bun test test/session-setters.test.ts` → pass; full suite green; tsc clean.
 - [ ] 5. Commit "feat(session): setModel/setAgent publish session.updated"
 
@@ -246,8 +266,10 @@ Steps:
     import type { SessionInfo, Message } from "../session/types.ts";
     import type { App } from "../app.ts";
     import type { PermissionRequest } from "../permission/types.ts";
-    import type { UiStore } from "./store.ts";   // type-only import; no cycle at runtime
     import type { UiPrefs } from "./prefs.ts";
+    // NOTE: do NOT import ./store.ts here — it is produced in Task 14 and a forward module
+    // import would fail every intervening `tsc --noEmit` gate. CommandContext.store is typed
+    // structurally via UiStoreLike below; the concrete UiStore (Task 14) `implements UiStoreLike`.
 
     export type ModalKind =
       | "palette" | "help" | "whichkey" | "sessions" | "models" | "agents"
@@ -262,6 +284,25 @@ Steps:
       kind: "command" | "file"; matched?: number[];
     }
 
+    // Typed modal props (consumed by ModalLayer in Task 39; opened via CommandContext.openModal).
+    export type ModalProps =
+      | { kind: "rename"; message: string; initial: string; onSubmit(title: string): void }
+      | { kind: "login"; message: string; onSubmit(key: string): void }
+      | { kind: "confirm"; message: string; onYes(): void; onNo(): void };
+
+    // Structural view of UiStore (Task 14) so types.ts has no forward module dependency.
+    export interface UiStoreLike {
+      setSessionID(id: string): void;
+      appendSynthetic(message: Message): void;
+      replyPermission(reply: "once" | "always" | "reject", feedback?: string): void;
+      openModal(kind: ModalKind, props?: ModalProps): void;
+      closeModal(): void;
+      toast(text: string, kind?: ToastKind): void;
+      setReonboarding(on: boolean): void;
+      scrollBy(deltaRows: number): void;   // + = older/up, − = newer/down; clamps; 0 follows tail
+      clearInput?(): void;                 // optional hook the editor registers for ctrl-c clear
+    }
+
     export interface UiState {
       session: SessionInfo;
       history: Message[];
@@ -270,9 +311,10 @@ Steps:
       compacting: boolean;
       context: { tokens: number; usable: number; pct: number };
       permission: PermissionRequest | null;
-      modal: { kind: ModalKind; props?: unknown } | null;
+      modal: { kind: ModalKind; props?: ModalProps } | null;
       reonboarding: boolean;
       sidebarOverlay: boolean;
+      scrollOffset: number;          // rows scrolled up from the tail; 0 = following the live tail
       toast: { text: string; kind: ToastKind } | null;
       changedFiles: string[];
       connectorReady: boolean;
@@ -289,12 +331,13 @@ Steps:
 
     export interface CommandContext {
       app: App;
-      store: UiStore;
+      store: UiStoreLike;
       session: SessionInfo;
       abort: AbortSignal;
       host: CommandHost;
       send(text: string, override?: { agent?: string; model?: string }): Promise<void>;
-      openModal(kind: ModalKind, props?: unknown): void;
+      gateShell(command: string): Promise<boolean>;   // permission-gated shell for command expansion (App wires to app.permissions.ask)
+      openModal(kind: ModalKind, props?: ModalProps): void;
       closeModal(): void;
       toast(text: string, kind?: ToastKind): void;
       prefs: UiPrefs;
@@ -562,8 +605,10 @@ Steps:
        `Completion{ value:"/"+slash, label:title, hint:category, kind:"command", matched }`. If the
        token starts with `@` → file mode: `q = token.slice(1)`; prefix then fuzzysort over
        `files()`; map to `Completion{ value:path, label:path, kind:"file" }`. Otherwise return `[]`.
-       Cap at 8. Exclude secret/`.env` paths (skip any file path whose basename matches
-       `/^\.env|\.pem$|secret/i`).
+       Cap at 8. Exclude paths that `readAttachment` (`src/util/path.ts`) would reject
+       (secret/`.env`/key material): if `util/path.ts` exports a reusable secret/deny predicate, call
+       it; otherwise replicate its denylist exactly (do not invent a looser one) so completion and
+       attachment stay in agreement.
 - [ ] 4. Run → pass; tsc clean.
 - [ ] 5. Commit "feat(tui): prefix-then-fuzzy autocomplete"
 
@@ -588,6 +633,10 @@ Steps:
       test("? with text → falls through", () => expect(resolveKey("?", K(), { ...base, bufferEmpty:false })).toBeNull());
       test("esc closes modal before interrupt", () => expect(resolveKey("", K({escape:true}), { ...base, modalOpen:true, busy:true })).toEqual({ kind:"builtin", name:"modal.close" }));
       test("esc interrupts when busy no modal", () => expect(resolveKey("", K({escape:true}), { ...base, busy:true })).toEqual({ kind:"builtin", name:"interrupt" }));
+      test("pageUp → scroll.up", () => expect(resolveKey("", K({pageUp:true}), base)).toEqual({ kind:"builtin", name:"scroll.up" }));
+      test("pageDown → scroll.down", () => expect(resolveKey("", K({pageDown:true}), base)).toEqual({ kind:"builtin", name:"scroll.down" }));
+      test("ctrl+c → ctrl-c builtin (App owns the state machine)", () => expect(resolveKey("c", K({ctrl:true}), base)).toEqual({ kind:"builtin", name:"ctrl-c" }));
+      test("ctrl+c ignored while modal open (falls to modal.close via esc path only)", () => expect(resolveKey("c", K({ctrl:true}), { ...base, modalOpen:true })).toEqual({ kind:"builtin", name:"modal.close" }));
     });
 
 - [ ] 2. Run → FAIL.
@@ -596,9 +645,13 @@ Steps:
        (ctrl+p/ctrl+k), `help` (`?` when bufferEmpty, or `f1`), `session.new` (ctrl+n),
        `session.list` (ctrl+s), `model.picker` (ctrl+o), `agent.picker` (ctrl+g), `theme.picker`
        (ctrl+t), `sidebar.toggle` (ctrl+b), `editor.external` (ctrl+e), `file.attach` (ctrl+f),
-       `screen.clear` (ctrl+l). Builtins: `modal.close`, `popover.dismiss`, `interrupt`,
-       `agent.cycle`/`agent.cycle.reverse` (tab/shift+tab when bufferEmpty && !popoverOpen), `quit`
-       (ctrl+d empty). Return `null` for anything that should reach the editor.
+       `screen.clear` (ctrl+l). Builtins: `modal.close` (esc/ctrl+c when a modal is open),
+       `popover.dismiss` (esc when the autocomplete popover is open), `interrupt` (esc when busy, no
+       modal), `scroll.up`/`scroll.down` (pageUp/pageDown, no modal), `ctrl-c` (ctrl+c when no modal —
+       the App owns the 1.5 s double-press→quit / busy→interrupt / non-empty-buffer→clear state
+       machine, Task 43), `agent.cycle`/`agent.cycle.reverse` (tab/shift+tab when bufferEmpty &&
+       !popoverOpen), `quit` (ctrl+d when bufferEmpty). Return `null` for anything that should reach
+       the editor.
 - [ ] 4. Run → pass; tsc clean.
 - [ ] 5. Commit "feat(tui): context-aware keymap resolver"
 
@@ -657,14 +710,14 @@ Steps:
     | `whichkey` | `keys` | System | — | `ctx.openModal("whichkey")` |
     | `status` | `status` | System | — | `ctx.openModal("status")` |
     | `screen.clear` | `clear` | System | ctrl+l | clear+redraw (App handles) |
-    | `app.quit` | `quit` | System | — | `ctx.app.dispose()` then exit |
+    | `app.quit` | `quit` | System | — | `ctx.host.quit()` |
     | `onboarding` | `onboarding` | System | — | `ctx.store.setReonboarding(true)` |
     | `session.new` | `new` | Session | ctrl+n | `ctx.store.setSessionID(ctx.app.store.create({agent:ctx.session.agent,title:"New session"}).id)` |
     | `session.list` | `sessions` | Session | ctrl+s | `ctx.openModal("sessions")` |
     | `session.resume` | `resume` | Session | — | `ctx.openModal("sessions")` |
     | `session.compact` | `compact` | Session | — | `await ctx.app.engine.compact(ctx.session.id,{auto:false,abort:ctx.abort})` |
     | `session.export` | `export` | Session | — | write transcript md (App helper) |
-    | `session.rename` | `rename` | Session | — | `ctx.openModal("prompt", {kind:"rename"})` |
+    | `session.rename` | `rename` | Session | — | `ctx.openModal("prompt", { kind:"rename", message:"Rename session", initial: ctx.session.title, onSubmit:(t)=>{ ctx.app.store.update({ ...ctx.app.store.get(ctx.session.id)!, title:t }); ctx.app.bus.publish({type:"session.updated",session:ctx.app.store.get(ctx.session.id)!}); ctx.closeModal(); } })` |
     | `session.interrupt` | `interrupt` | Session | — | App interrupt handler |
     | `model.picker` | `models` | Model | ctrl+o | `ctx.openModal("models")` |
     | `agent.picker` | `agents` | Agent | ctrl+g | `ctx.openModal("agents")` |
@@ -675,7 +728,7 @@ Steps:
     | `skills` | `skills` | Skill | — | `ctx.openModal("skills")` |
     | `editor.external` | `editor` | Prompt | ctrl+e | open `$EDITOR` (App helper) |
     | `file.attach` | `attach` | Prompt | ctrl+f | App seeds an `@` in the editor |
-    | `auth.login` | `login` | Auth | — | `ctx.openModal("prompt",{kind:"login"})` |
+    | `auth.login` | `login` | Auth | — | opens a provider `SelectDialog` (`Object.keys(ENV_KEYS)`), then a masked `Prompt` (`kind:"login"`) whose `onSubmit(key)` → `ctx.app.auth?.set(provider,key)` + `ctx.app.providers.invalidate(provider)` + toast + `ctx.closeModal()` |
     | `connectors` | `connectors` | Auth | — | `ctx.openModal("status")` (connectors shown there) |
 
        Items whose `run` needs App-only state (screen.clear, export, editor.external, file.attach,
@@ -719,8 +772,8 @@ Steps:
          `session.status idle` (which forces an immediate flush per §6.3). Assert `live` text.
        - on `session.status idle` → `live` moves into `history`, `live` becomes null, and `context`
          updates to `{tokens:10,...}` (pulled).
-       - `part.updated` with a `tool` part `{ tool:"write", args:{ path:"a.ts" } }` adds `"a.ts"` to
-         `changedFiles` (deduped on a second identical event).
+       - `part.updated` with a `tool` part `{ tool:"write", args:{ filePath:"a.ts" } }` adds `"a.ts"`
+         to `changedFiles` (deduped on a second identical event).
        - `permission.asked` sets `permission`; a second ask queues; `replyPermission("once")` calls
          `app.permissions.reply(id,"once",undefined)` and advances to the queued one.
        - an event for a DIFFERENT `sessionID` (a subtask child) is ignored (history unchanged).
@@ -743,7 +796,13 @@ Steps:
          config model's provider.
        - `appendSynthetic(m)` pushes to `history` + notifies. `openModal/closeModal/toast/
          setReonboarding/setSessionID` mutate state + notify. `toast` auto-clears after 4s.
+       - `scrollBy(delta)` adjusts `state.scrollOffset` (clamped to `[0, maxOffset]`). When new
+         history/live content arrives while `scrollOffset===0`, stay at 0 (auto-follow tail); when
+         `scrollOffset>0`, leave it (frozen) but re-clamp to the new max.
+       - `changedFiles` reads `part.args.filePath` only (both edit and write tools use `filePath`;
+         narrow `part.args` as `{ filePath?: string }` — do NOT use `any`).
        - `dispose()` unsubscribes + clears timers.
+       Implement `UiStore` as `implements UiStoreLike` (Task 5) so `CommandContext.store` type-checks.
 - [ ] 4. Run → pass; `~/.bun/bin/bun test` (full) green; `./node_modules/.bin/tsc --noEmit` clean
        (the Task 5 `./store.ts` type-only import now resolves).
 - [ ] 5. Commit "feat(tui): UiStore bus→state reducer"
@@ -848,18 +907,32 @@ Steps:
 - [ ] 2. Run → FAIL. 3. Implement mapping over `message.parts` by `part.type`. 4. pass; tsc clean.
 - [ ] 5. Commit "feat(tui): MessageView component"
 
-## Task 21: Transcript (Static history + live)
+## Task 21: Transcript (bottom-anchored scroll viewport)
 
 Files: create `src/tui/components/Transcript.tsx`; create `test/tui/transcript.test.tsx`
 Interfaces:
-  Consumes: `useUi` (Task 15), `MessageView` (Task 20), Ink `Static`
-  Produces: `Transcript()` — renders `history` in `<Static>` and `live` (if any) in the dynamic tree
+  Consumes: `useUi` (Task 15), `MessageView` (Task 20)
+  Produces: `Transcript({ height }: { height: number })` — renders a bottom-anchored, scrollable
+    window of `[...history, ...(live?[live]:[])]` sized to `height` rows; scroll driven by
+    `state.scrollOffset` (0 = following the tail)
+IMPORTANT: **Do NOT use Ink `<Static>`.** In alternate-screen mode the terminal has no scrollback,
+so Static content that overflows the top is lost and unreachable. The transcript must own its own
+scroll viewport instead.
 Steps:
-- [ ] 1. Test: with a fake store snapshot of `history:[user,assistant]` + `live:null`, assert both
-       messages appear; with `live` set, assert the streaming text appears after history.
-- [ ] 2. Run → FAIL. 3. Implement `<Static items={history}>{(m) => <MessageView message={m}/>}</Static>`
-       then `{live && <MessageView message={live}/>}`. 4. pass; tsc clean.
-- [ ] 5. Commit "feat(tui): Transcript with Static history"
+- [ ] 1. Test: snapshot `history:[u1,a1,u2,a2]`, `live:null`, `scrollOffset:0`, small `height` →
+       assert the MOST RECENT messages render (tail-anchored) and older ones are clipped; with
+       `scrollOffset` > 0 assert an earlier message becomes visible and the newest is clipped; with
+       `live` set and `scrollOffset:0` assert the streaming message is visible at the bottom. Extract
+       a pure `windowMessages(all: Message[], height: number, scrollOffset: number): Message[]` and
+       unit-test its slicing directly (this is the load-bearing logic; keep the component thin).
+- [ ] 2. Run → FAIL. 3. Implement: flatten `[...history, live].filter(Boolean)`; `windowMessages`
+       returns the message slice that fits `height` rows anchored to the tail, shifted up by
+       `scrollOffset` (message-granular windowing — a single message taller than the viewport renders
+       from its top; row-accurate within-message scroll is a documented later refinement). Render the
+       slice in a `<Box flexDirection="column" height={height} overflow="hidden">`; a `↑ N earlier`
+       hint when older messages are hidden above. (App owns `scrollOffset` and computes `height`;
+       Tasks 11+43.)
+- [ ] 4. pass; tsc clean. 5. Commit "feat(tui): Transcript scroll viewport (no Static)"
 
 ## Task 22: Header
 
@@ -938,7 +1011,10 @@ Steps:
        re-render; `useInput` routes editing keys into the buffer, Enter → submit/complete, `\`-suffix
        or shift+enter → newline; compute `completionsFor(buffer.value(), cursorIndex, items, files)`
        each render; render the input line with a cursor glyph + a popover list below (max 8) with the
-       highlighted row in `theme.selectionBg`. Extract `applyKey`/`cursorIndex` as pure helpers in
+       highlighted row in `theme.selectionBg`. Position the real terminal cursor with
+       `useCursor().setCursorPosition({x,y})`, computing `x` with a display-width helper (`string-width`,
+       an ink transitive dep, or import it) so wide/CJK/emoji glyphs don't misplace the cursor — naive
+       char-count columns are wrong for wide glyphs. Extract `applyKey`/`cursorIndex` as pure helpers in
        `src/tui/input/editor-reducer.ts` for the unit tests. `files` = a lazy workspace file lister
        (reuse `util/glob.ts` if present; else `node:fs` readdir of cwd, cap 500).
 - [ ] 4. Run → pass; tsc clean. 5. Commit "feat(tui): PromptEditor with autocomplete popover"
@@ -1082,8 +1158,9 @@ Interfaces:
   Consumes: `useUi` (reads `state.permission`), `useStore` (`replyPermission`), `useTheme`
   Produces: `Permission()` — renders when `state.permission` is set
 Steps:
-- [ ] 1. Test: fake store snapshot with `permission:{ id:"p1", permission:"bash", patterns:["git push"],
-       title:"run git push", metadata:{} }`; render; assert `bash`, `git push`, `run git push`, and the
+- [ ] 1. Test: fake store snapshot with `permission:{ id:"p1", sessionID:"s1", permission:"bash",
+       patterns:["git push"], title:"run git push", metadata:{} }` (include `sessionID` — it is
+       required on `PermissionRequest`); render; assert `bash`, `git push`, `run git push`, and the
        `[y]es [a]lways [n]o` row; `stdin.write("y")` → `store.replyPermission("once")` (spy); `stdin.write("n")`
        then type feedback + Enter → `replyPermission("reject", feedback)`; `metadata.dangerous:true`
        renders a DANGEROUS banner.
@@ -1130,6 +1207,13 @@ Steps:
 - [ ] 2. Run → FAIL. 3. Implement a `switch(state.permission ? "permission" : state.modal?.kind)`
        returning the dialog inside a `<Box position="absolute" width="100%" height="100%"
        justifyContent="center" alignItems="center">` wrapper with an opaque `backgroundColor`.
+       **Per-kind prop map** (from `state.modal.props: ModalProps` + `ctx`): `permission` → `<Permission/>`
+       (reads store itself, no props); `palette|help|status|skills` → `<X ctx={ctx}/>`;
+       `sessions|models|agents|themes` → `<X ctx={ctx}/>`; `whichkey` → `<WhichKey onCancel={ctx.closeModal}/>`;
+       `prompt` → `<Prompt message={props.message} initial={"initial" in props ? props.initial : ""}
+       mask={props.kind==="login"} onSubmit={props.onSubmit} onCancel={ctx.closeModal}/>`;
+       `confirm` → `<Confirm message={props.message} onYes={props.onYes} onNo={props.onNo}/>`. Narrow
+       `props` by `props.kind` (the `ModalProps` discriminant) — no `any`.
 - [ ] 4. pass; tsc clean. 5. Commit "feat(tui): ModalLayer router"
 
 ---
@@ -1189,29 +1273,51 @@ Files: create `src/tui/app.tsx`; create `test/tui/app.test.tsx`
 Interfaces:
   Consumes: everything from Phases 1–5; Ink `render`/`useWindowSize`/`useInput`/`useApp`
   Produces: `App({ app }: { app: App })`; and the CommandContext factory used app-wide
+Note on optional App members: `app.commands`, `app.catalog`, `app.auth`, `app.tts` are optional in
+`src/app.ts`. Under strict TS every access must guard (`if (!app.catalog) { ctx.toast("catalog
+unavailable","warn"); return; }` inside the relevant item `run`, or `app.tts?.`). Never assume
+present; never use `!` non-null assertions to silence it.
 Steps:
 - [ ] 1. Test (ink-testing-library, no real alt-screen): render `<App app={fakeApp}/>` with an
        onboarded prefs file; assert the Home splash shows for an empty session; simulate `ctrl+p`
        (`stdin.write("")`) → the Palette modal appears; Esc closes it; type text + Enter →
-       `fakeApp.engine.prompt` called. Keep this a smoke-level integration test; per-widget behavior is
-       already covered by earlier tasks.
+       `fakeApp.engine.prompt` called. Add a focused ctrl+c test: idle with a non-empty buffer →
+       ctrl+c clears the buffer (no exit); busy → ctrl+c calls `abort`; two ctrl+c within 1.5 s (call
+       the exposed handler twice) → `host.quit`. Keep the render test smoke-level; per-widget behavior
+       is already covered by earlier tasks.
 - [ ] 2. Run → FAIL. 3. Implement per spec §7: build the `UiStore`, construct the `CommandContext`
        including the `host: CommandHost` object (Task 5) with real closures — `redraw()` calls the Ink
        instance's `clear()`+force re-render; `openEditor()` suspends Ink (`useApp().suspendTerminal` or
        unmount→spawn `$EDITOR`→remount) and loads the edited text into the PromptEditor; `attachFile()`
        seeds an `@` into the editor buffer; `exportTranscript()` writes markdown; `interrupt()` aborts
        the active turn; `quit()` unmounts then exits. `send` = set busy + `AbortController` +
-       `engine.prompt(session.id, text, abort, override)` + tts on completion + double-ctrl+c
-       interrupt. Wire the top-level `useInput` through `resolveKey` (gated `isActive={!modalOpen}`).
+       `engine.prompt(session.id, text, abort, override)` + tts on completion.
+       - **`gateShell(cmd)`** on ctx = call `app.permissions.ask(session.id, { permission:"bash",
+         pattern: cmd, title: cmd }, agent.permission)` and return whether the verdict allows (adapt to
+         the real `permissions.ask` signature confirmed in `src/permission/index.ts`; mirror the old
+         `Tui.gateShell`). Used by command expansion AND the shell escape.
+       - **`onShell(cmd)`** passed to `<PromptEditor>`: `if (await ctx.gateShell(cmd)) { run bash -c cmd;
+         append a synthetic user message via app.store.appendMessage }` (port the old `Tui.shellEscape`).
+       - Compute `transcriptHeight = rows − headerRows − footerRows − editorRows − (connectorReady?0:bannerRows)`
+         from `useWindowSize()`; pass to `<Transcript height={transcriptHeight}/>`.
+       Wire the top-level `useInput` through `resolveKey` (gated `isActive={!state.modal}`).
        Render Header / Body (`<Home/>` when `history.length===0 && !live`, else `<Transcript/>`) /
        Sidebar / a `<Banner>` when `!state.connectorReady` (guides the user to set a key) / Footer /
        PromptEditor / ModalLayer. Gate onboarding as the top-level route (render `<OnboardingWizard/>`
        instead of the layout) when `!prefs.onboarded || state.reonboarding`. Route `KeyAction`s:
        `{kind:"command",id}` → find the matching `PaletteItem` in `buildPaletteItems(ctx)` and
-       `await item.run(ctx)`; `{kind:"builtin",name}` → the small builtin handlers (`modal.close` →
-       `store.closeModal()`, `popover.dismiss` → editor clears popover, `interrupt` →
-       `ctx.host.interrupt()`, `quit` → `ctx.host.quit()`, `agent.cycle`/`agent.cycle.reverse` →
-       `engine.setAgent` to the next/prev `agents.primaries()`).
+       `await item.run(ctx)`. `{kind:"builtin",name}` handlers:
+       - `modal.close` → `store.closeModal()`
+       - `popover.dismiss` → editor clears its popover (via a ref/flag)
+       - `interrupt` → `ctx.host.interrupt()`
+       - `scroll.up` → `store.scrollBy(+halfPage)`; `scroll.down` → `store.scrollBy(−halfPage)`
+         (`halfPage = Math.floor(transcriptHeight/2)`)
+       - `ctrl-c` → state machine: busy → `ctx.host.interrupt()`; else buffer non-empty →
+         `store.clearInput?.()`; else previous ctrl-c < 1.5 s ago → `ctx.host.quit()`; else record the
+         timestamp + `store.toast("press ctrl+c again to quit")`
+       - `quit` → `ctx.host.quit()`
+       - `agent.cycle`/`agent.cycle.reverse` → `engine.setAgent(session.id, next/prev of
+         agents.primaries())`
 - [ ] 4. Run → pass; tsc clean. 5. Commit "feat(tui): App root + integration"
 
 ## Task 44: Non-TTY fallback REPL
