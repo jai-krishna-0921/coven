@@ -20,6 +20,8 @@ export interface SessionInfo {
   id: string;
   title: string;
   agent: string;
+  /** Per-session model override "provider/model-id"; undefined = inherit agent/config. */
+  model?: string;
   /** Set when this session is a subagent spawned by the task tool. */
   parentID?: string;
   created: number;
