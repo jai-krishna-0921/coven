@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveKey, type KeyObject } from "../../src/tui/keymap.ts";
+import { resolveKey, BINDINGS, type KeyObject } from "../../src/tui/keymap.ts";
 const K = (o: Partial<KeyObject> = {}): KeyObject => ({ ctrl:false,shift:false,meta:false,return:false,escape:false,upArrow:false,downArrow:false,leftArrow:false,rightArrow:false,pageUp:false,pageDown:false,tab:false,backspace:false,delete:false, ...o });
 const base = { modalOpen:false, busy:false, popoverOpen:false, bufferEmpty:true };
 describe("resolveKey", () => {
@@ -13,4 +13,18 @@ describe("resolveKey", () => {
   test("pageDown → scroll.down", () => expect(resolveKey("", K({pageDown:true}), base)).toEqual({ kind:"builtin", name:"scroll.down" }));
   test("ctrl+c → ctrl-c builtin (App owns the state machine)", () => expect(resolveKey("c", K({ctrl:true}), base)).toEqual({ kind:"builtin", name:"ctrl-c" }));
   test("ctrl+c ignored while modal open (falls to modal.close via esc path only)", () => expect(resolveKey("c", K({ctrl:true}), { ...base, modalOpen:true })).toEqual({ kind:"builtin", name:"modal.close" }));
+});
+
+describe("BINDINGS", () => {
+  test("includes the command palette shortcut in display form", () => {
+    expect(BINDINGS).toContainEqual({ key: "ctrl+p", action: "Command palette", category: "Global" });
+  });
+  test("every entry has key/action/category strings", () => {
+    expect(BINDINGS.length).toBeGreaterThan(0);
+    for (const b of BINDINGS) {
+      expect(typeof b.key).toBe("string");
+      expect(b.action.length).toBeGreaterThan(0);
+      expect(b.category.length).toBeGreaterThan(0);
+    }
+  });
 });

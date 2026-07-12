@@ -30,6 +30,45 @@ export interface KeyObject {
 const cmd = (id: string): KeyAction => ({ kind: "command", id });
 const builtin = (name: string): KeyAction => ({ kind: "builtin", name });
 
+/** One human-readable row of the §10.1 table, for display in Help/WhichKey. */
+export interface Binding {
+  key: string;
+  action: string;
+  category: string;
+}
+
+/**
+ * The §10.1 keybinding table in display form. Consumed by the Help and WhichKey
+ * dialogs (this is presentation only — {@link resolveKey} is the source of truth
+ * for behavior). Categories group the cheatsheet: Global · Navigation · Editing.
+ */
+export const BINDINGS: Binding[] = [
+  { key: "ctrl+p", action: "Command palette", category: "Global" },
+  { key: "ctrl+k", action: "Command palette", category: "Global" },
+  { key: "?", action: "Help", category: "Global" },
+  { key: "f1", action: "Help", category: "Global" },
+  { key: "ctrl+n", action: "New session", category: "Global" },
+  { key: "ctrl+s", action: "Session switcher", category: "Global" },
+  { key: "ctrl+o", action: "Model picker", category: "Global" },
+  { key: "ctrl+g", action: "Agent picker", category: "Global" },
+  { key: "ctrl+t", action: "Theme picker", category: "Global" },
+  { key: "ctrl+b", action: "Toggle sidebar", category: "Global" },
+  { key: "ctrl+e", action: "Open $EDITOR", category: "Global" },
+  { key: "ctrl+f", action: "Attach file", category: "Global" },
+  { key: "ctrl+l", action: "Clear screen", category: "Global" },
+  { key: "tab / shift+tab", action: "Cycle agent", category: "Navigation" },
+  { key: "up / down", action: "Move selection / history", category: "Navigation" },
+  { key: "pageup / pagedown", action: "Scroll transcript", category: "Navigation" },
+  { key: "enter", action: "Submit / select", category: "Navigation" },
+  { key: "esc", action: "Close modal / dismiss popover", category: "Navigation" },
+  { key: "shift+enter / ctrl+j", action: "Newline", category: "Editing" },
+  { key: "ctrl+a", action: "Line start", category: "Editing" },
+  { key: "ctrl+w", action: "Delete word left", category: "Editing" },
+  { key: "ctrl+u", action: "Kill to line start", category: "Editing" },
+  { key: "ctrl+c", action: "Interrupt (twice: quit)", category: "Editing" },
+  { key: "ctrl+d", action: "Quit (empty buffer)", category: "Editing" },
+];
+
 export function resolveKey(input: string, key: KeyObject, ctx: KeyContext): KeyAction | null {
   // 1. Modal captures the screen: only esc / ctrl+c close it; nav is the modal's own.
   if (ctx.modalOpen) {
