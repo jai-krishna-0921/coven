@@ -49,6 +49,10 @@ const FOOTER_ROWS = 1;
 const EDITOR_ROWS = 1;
 const BANNER_ROWS = 3; // bordered notice
 const SHELL_TIMEOUT_MS = 120_000;
+// scrollOffset is message-granular (see UiStore.maxOffset), so scroll steps are
+// counted in MESSAGES, not rows — a page nudges a few messages, a line just one.
+const SCROLL_PAGE = 4;
+const SCROLL_LINE = 1;
 
 const errMsg = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -183,7 +187,6 @@ function AppShell({
   const onboarding = !prefs.onboarded || state.reonboarding;
   const bannerRows = state.connectorReady ? 0 : BANNER_ROWS;
   const transcriptHeight = Math.max(3, rows - HEADER_ROWS - FOOTER_ROWS - EDITOR_ROWS - bannerRows);
-  const halfPage = Math.max(1, Math.floor(transcriptHeight / 2));
   const isHome = state.history.length === 0 && !state.live;
   const inputActive = state.modal === null && state.permission === null;
   const showSidebar = prefs.sidebar && columns >= SIDEBAR_MIN_COLS;
@@ -374,10 +377,16 @@ function AppShell({
         host.interrupt();
         break;
       case "scroll.up":
-        store.scrollBy(halfPage);
+        store.scrollBy(SCROLL_PAGE);
         break;
       case "scroll.down":
-        store.scrollBy(-halfPage);
+        store.scrollBy(-SCROLL_PAGE);
+        break;
+      case "scroll.up.line":
+        store.scrollBy(SCROLL_LINE);
+        break;
+      case "scroll.down.line":
+        store.scrollBy(-SCROLL_LINE);
         break;
       case "ctrl-c":
         handleCtrlC();

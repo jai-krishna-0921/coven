@@ -11,6 +11,9 @@ describe("resolveKey", () => {
   test("esc interrupts when busy no modal", () => expect(resolveKey("", K({escape:true}), { ...base, busy:true })).toEqual({ kind:"builtin", name:"interrupt" }));
   test("pageUp → scroll.up", () => expect(resolveKey("", K({pageUp:true}), base)).toEqual({ kind:"builtin", name:"scroll.up" }));
   test("pageDown → scroll.down", () => expect(resolveKey("", K({pageDown:true}), base)).toEqual({ kind:"builtin", name:"scroll.down" }));
+  test("shift+up → scroll.up.line", () => expect(resolveKey("", K({shift:true,upArrow:true}), base)).toEqual({ kind:"builtin", name:"scroll.up.line" }));
+  test("shift+down → scroll.down.line", () => expect(resolveKey("", K({shift:true,downArrow:true}), base)).toEqual({ kind:"builtin", name:"scroll.down.line" }));
+  test("plain up (no shift) falls through to the editor for history", () => expect(resolveKey("", K({upArrow:true}), base)).toBeNull());
   test("ctrl+c → ctrl-c builtin (App owns the state machine)", () => expect(resolveKey("c", K({ctrl:true}), base)).toEqual({ kind:"builtin", name:"ctrl-c" }));
   test("ctrl+c ignored while modal open (falls to modal.close via esc path only)", () => expect(resolveKey("c", K({ctrl:true}), { ...base, modalOpen:true })).toEqual({ kind:"builtin", name:"modal.close" }));
 });

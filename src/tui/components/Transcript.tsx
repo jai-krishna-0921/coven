@@ -71,7 +71,7 @@ export function Transcript({ height }: { height: number }) {
 
   return (
     <Box flexDirection="column" height={height} justifyContent="flex-end" overflow="hidden">
-      {above > 0 ? <Text dimColor>↑ {above} earlier</Text> : null}
+      {above > 0 ? <Text dimColor>{`${above} more above · PgUp/PgDn · shift+Up/Down to scroll`}</Text> : null}
       {visible.map((message) => (
         <MessageView key={message.id} message={message} />
       ))}

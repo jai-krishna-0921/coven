@@ -99,8 +99,9 @@ describe("Transcript", () => {
     expect(f).toContain("streaming now");
   });
 
-  test("shows an earlier-messages hint when older content is hidden above", () => {
+  test("shows a scroll hint when older content is hidden above", () => {
     const f = frameOf(stateWith(HISTORY, null, 0), 3);
-    expect(f).toContain("earlier");
+    expect(f).toContain("more above");
+    expect(f).toContain("scroll");
   });
 });

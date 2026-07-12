@@ -58,7 +58,8 @@ export const BINDINGS: Binding[] = [
   { key: "ctrl+l", action: "Clear screen", category: "Global" },
   { key: "tab / shift+tab", action: "Cycle agent", category: "Navigation" },
   { key: "up / down", action: "Move selection / history", category: "Navigation" },
-  { key: "pageup / pagedown", action: "Scroll transcript", category: "Navigation" },
+  { key: "pageup / pagedown", action: "Scroll transcript (page)", category: "Navigation" },
+  { key: "shift+up / shift+down", action: "Scroll transcript (line)", category: "Navigation" },
   { key: "enter", action: "Submit / select", category: "Navigation" },
   { key: "esc", action: "Close modal / dismiss popover", category: "Navigation" },
   { key: "shift+enter / ctrl+j", action: "Newline", category: "Editing" },
@@ -113,6 +114,11 @@ export function resolveKey(input: string, key: KeyObject, ctx: KeyContext): KeyA
   }
 
   if (input === "?" && ctx.bufferEmpty && !key.ctrl && !key.meta) return cmd("help");
+  // Transcript scroll: PgUp/PgDn jump a page; shift+↑/↓ nudge one message so a
+  // keyboard without PgUp can still read back. Plain ↑/↓ fall through to the
+  // editor (history / popover), so scroll never steals them.
+  if (key.shift && key.upArrow) return builtin("scroll.up.line");
+  if (key.shift && key.downArrow) return builtin("scroll.down.line");
   if (key.pageUp) return builtin("scroll.up");
   if (key.pageDown) return builtin("scroll.down");
   if (key.tab && ctx.bufferEmpty && !ctx.popoverOpen) {

@@ -165,7 +165,8 @@ export function PromptEditor({
         }
         // Any other key falls through to editing, which narrows the popover.
       } else {
-        if (key.upArrow && isSingleLine(buffer)) {
+        // shift+↑/↓ is transcript scroll (handled by the App), never history.
+        if (key.upArrow && !ek.shift && isSingleLine(buffer)) {
           const prev = history.prev();
           if (prev !== undefined) {
             buffer.setValue(prev);
@@ -173,7 +174,7 @@ export function PromptEditor({
           }
           return;
         }
-        if (key.downArrow && isSingleLine(buffer)) {
+        if (key.downArrow && !ek.shift && isSingleLine(buffer)) {
           const forward = history.next();
           buffer.setValue(forward ?? "");
           bump();
@@ -209,7 +210,13 @@ export function PromptEditor({
     <Box flexDirection="column">
       <Box>
         <Text color={theme.accent}>{icons.prompt} </Text>
-        <Text color={theme.fg}>{value}</Text>
+        {value.length > 0 ? (
+          <Text color={theme.fg}>{value}</Text>
+        ) : active ? (
+          <Text color={theme.fgSubtle} dimColor>
+            Type a message and press enter — or / for commands, @ for files, ? for help
+          </Text>
+        ) : null}
       </Box>
       {open ? (
         <Box flexDirection="column">
