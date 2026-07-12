@@ -1053,8 +1053,11 @@ Steps:
        appear; typing `new` filters to `New session`; Enter runs that item's `run` (spy) and closes
        the modal (`ctx.closeModal` spy called).
 - [ ] 2. Run → FAIL. 3. Implement: map items → `SelectOption{ value:id, label:title, hint:keybinding,
-       group:category }`; `onSelect` → find item, `await item.run(ctx)`, `ctx.closeModal()`;
-       `onCancel` → `ctx.closeModal()`. 4. pass; tsc clean. 5. Commit "feat(tui): command palette"
+       group:category }`; `onSelect` → find item, then **`ctx.closeModal()` FIRST, then run the item**
+       (`ctx.closeModal(); void Promise.resolve(item?.run(ctx)).catch(e => ctx.toast(String(e),"error"))`).
+       Close-first is required: many items' `run` opens another modal via `ctx.openModal(...)`; a
+       trailing `closeModal()` would clobber it. `onCancel` → `ctx.closeModal()`. 4. pass; tsc clean.
+       5. Commit "feat(tui): command palette"
 
 ## Task 29: Help (interactive two-pane)
 
