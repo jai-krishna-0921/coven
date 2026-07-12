@@ -44,7 +44,9 @@ Coven is a terminal-based AI coding assistant built around four ideas:
 3. **Guardrails as architecture.** Every tool call passes through a permission engine, a bash command scanner, symlink-safe path containment, and a doom-loop detector. Plugins can observe and veto everything.
 4. **Context that manages itself.** Provider-reported token accounting, DCP-style pruning of stale tool outputs, and rolling anchored-summary compaction — long sessions stay sharp instead of dying at the context wall.
 
-Built with [Bun](https://bun.sh) + TypeScript, ships as a Node ≥ 20 binary. Two runtime dependencies (`@anthropic-ai/sdk`, `zod`).
+Since **v0.3** Coven runs as a **full-screen terminal app** (alternate-screen, built on Ink): a home splash, a scrollable transcript, a toggleable sidebar, and a persistent status bar — plus a first-run **onboarding wizard** (theme · accent · layout · glyphs · connector), a fuzzy **command palette** (`ctrl+p`), inline slash-command autocomplete, interactive help (`?`), and **7 themes** with live preview.
+
+Built with [Bun](https://bun.sh) + TypeScript, ships as a Node ≥ 20 binary. Runtime dependencies: `@anthropic-ai/sdk`, `zod`, and — for the TUI — `ink` + `react` + `fuzzysort`.
 
 ## Installation
 
@@ -141,7 +143,9 @@ You are the Shipwright. …
 | `!<cmd>` | run a shell command yourself |
 | `@file` | attach a file to your prompt |
 
-Multi-line input: end a line with `\` or open a ` ``` ` fence. Tab-completion for commands and agents; input history persists across sessions.
+Every command is also reachable from the palette. **Keys:** `ctrl+p`/`ctrl+k` command palette · `?`/`f1` help · `ctrl+n` new session · `ctrl+s` sessions · `ctrl+o` model · `ctrl+g` agent · `ctrl+t` theme · `ctrl+b` sidebar · `ctrl+e` `$EDITOR` · `ctrl+f` attach file · `pgup`/`pgdn` scroll · `tab`/`shift+tab` cycle agent · `esc` close/interrupt · `ctrl+c` interrupt (twice: quit).
+
+Type `/` in the prompt to open **inline autocomplete** that narrows as you type (`/r` → every command starting with `r`, `/re` narrows further). Multi-line input: end a line with `\` or open a ` ``` ` fence. Input history persists across sessions. Preferences (theme, layout, glyphs) live in `~/.local/share/coven/tui.json`; re-run setup any time with `/onboarding`.
 
 ### Custom commands
 
@@ -242,7 +246,7 @@ node dist/index.js --version   # verify the published artifact under plain node
 
 ## Contributing
 
-Issues and PRs welcome. Coven follows its own methodology — design before code, TDD, verification before completion; the skills in `.coven/skills/` document it. New behavior lands with a test in the same commit; conventional commits; two runtime deps and that stays deliberate.
+Issues and PRs welcome. Coven follows its own methodology — design before code, TDD, verification before completion; the skills in `.coven/skills/` document it. New behavior lands with a test in the same commit; conventional commits; dependencies stay minimal and deliberate (each one earns a justification in the commit body).
 
 If you build something using "coven" in its name, please add a note clarifying it isn't affiliated with this project.
 
