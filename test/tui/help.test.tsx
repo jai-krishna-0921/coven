@@ -75,14 +75,30 @@ describe("Help", () => {
     expect(f).toContain("ctrl+p");
   });
 
-  test("down arrow switches category and updates the detail pane", async () => {
+  test("tab switches category and updates the detail pane", async () => {
     const { ctx } = makeCtx();
     const { lastFrame, stdin } = renderHelp(ctx);
-    stdin.write("\x1b[B");
+    stdin.write("\t"); // Shortcuts → Commands
     await tick();
     const f = lastFrame() ?? "";
     expect(f).toContain("/new"); // a command slash — proves the Commands pane rendered
     expect(f).not.toContain("ctrl+p"); // the Shortcuts detail is gone
+  });
+
+  test("right/left arrows switch category; down no longer switches it (it scrolls)", async () => {
+    const { ctx } = makeCtx();
+    const { lastFrame, stdin } = renderHelp(ctx);
+    stdin.write("\x1b[C"); // right: Shortcuts → Commands
+    await tick();
+    expect(lastFrame() ?? "").toContain("/new");
+    stdin.write("\x1b[B"); // down: must NOT advance to Agents
+    await tick();
+    const f = lastFrame() ?? "";
+    expect(f).toContain("/"); // still on the Commands pane
+    expect(f).not.toContain("primary · Builds"); // the Agents detail did not appear
+    stdin.write("\x1b[D"); // left: back to Shortcuts
+    await tick();
+    expect(lastFrame() ?? "").toContain("ctrl+p");
   });
 
   test("typing filters the active pane", async () => {
