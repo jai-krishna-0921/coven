@@ -16,7 +16,7 @@ import { createApp } from "./app.ts";
 import { runTui } from "./tui/index.ts";
 import { bold, cyan, dim, green, red, yellow } from "./util/ansi.ts";
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 
 function ask(prompt: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });

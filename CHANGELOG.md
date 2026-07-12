@@ -3,6 +3,33 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.1] — 2026-07-12
+
+### Fixed
+- **Typed slash commands now execute.** Pressing enter on a `/command` (e.g.
+  `/theme-toggle`) ran the model instead of the command — the prompt is now routed
+  through the command resolver first. In the autocomplete popover, **Tab** completes and
+  **Enter** runs the highlighted command (files still just insert).
+- **Themes actually apply.** The shell never painted a background, so a light theme only
+  recoloured text (dark-on-dark, invisible) and `/theme-toggle` looked inert. The shell
+  now paints `theme.bg`; dialogs and banners paint `theme.bgPanel`, so switching themes
+  repaints the whole screen and light themes are usable.
+- **Connectors are real.** `/login` and `/connectors` open a provider picker showing each
+  provider's live auth state; keyed providers prompt for their key (env var named),
+  **Ollama is shown as local & keyless** and jumps to the model picker. New `/model <ref>`
+  sets any model ref directly (e.g. `ollama/llama3.2`) for locally-pulled models; the
+  model picker marks keyless-local models as ready.
+- **Transcript scrolling.** Scroll offset is per-message, but a page step passed a
+  row-count, so one PgUp jumped straight to the top/bottom. Steps are now gradual;
+  **shift+↑/↓** scroll a line for keyboards without PgUp, and the hidden-content hint names
+  the keys.
+- **Help is readable.** Fixed-width category column (no more wrapped "Getting started"
+  desyncing rows), two-column detail with hanging-indent wrapping, and a scrollable detail
+  pane (tab / ←→ switch category, ↑↓ scroll) — the Agents and Skills panes now show every
+  entry with its full description.
+- **Input affordance.** The empty prompt shows a placeholder telling you where and how to
+  type; the active `provider/model` is shown in the Home splash, footer, and status.
+
 ## [0.3.0] — 2026-07-12
 
 ### Added
