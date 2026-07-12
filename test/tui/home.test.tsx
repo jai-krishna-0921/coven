@@ -45,7 +45,7 @@ describe("Home", () => {
     expect(f).toContain("c o v e n");
     expect(f).toContain("Ask anything");
     expect(f).toContain("builder");
-    expect(f).toContain("default");
+    expect(f).toContain("claude-opus-4-8");
     expect(f).toContain("ctrl+p commands");
   });
 });

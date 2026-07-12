@@ -83,7 +83,7 @@ export interface CommandContext {
 export interface PaletteItem {
   id: string; title: string; slash: string; category: PaletteCategory;
   keybinding?: string; aliases?: string[];
-  run(ctx: CommandContext): void | Promise<void>;
+  run(ctx: CommandContext, args?: string): void | Promise<void>;
   enabled?(ctx: CommandContext): boolean;
 }
 

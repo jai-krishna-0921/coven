@@ -29,7 +29,7 @@ import { ThemeProvider, UiProvider, useUi } from "./context.tsx";
 import { UiStore } from "./store.ts";
 import { loadPrefs, savePrefs, type UiPrefs } from "./prefs.ts";
 import { resolveKey, type KeyObject } from "./keymap.ts";
-import { buildPaletteItems } from "./commands.ts";
+import { buildPaletteItems, resolveSlash } from "./commands.ts";
 import type { CommandContext, CommandHost, KeyAction, ModalKind, ModalProps, ToastKind } from "./types.ts";
 import { Header } from "./components/Header.tsx";
 import { Footer } from "./components/Footer.tsx";
@@ -447,6 +447,18 @@ function AppShell({
         registerClear={registerClear}
         onSubmit={(text) => {
           bufferEmptyRef.current = true;
+          const trimmed = text.trim();
+          if (trimmed.startsWith("/")) {
+            const match = resolveSlash(items, trimmed);
+            if (match) {
+              void Promise.resolve(match.item.run(ctx, match.args)).catch((e) =>
+                store.toast(String(e), "error"),
+              );
+            } else {
+              store.toast(`Unknown command: ${trimmed.split(" ")[0]} — press ctrl+p for the list`, "warn");
+            }
+            return;
+          }
           void send(text);
         }}
         onShell={(command) => {

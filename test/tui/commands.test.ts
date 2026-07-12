@@ -1,6 +1,29 @@
 import { describe, expect, test, mock } from "bun:test";
-import { buildPaletteItems, runCommandSubtask } from "../../src/tui/commands.ts";
-import type { CommandContext } from "../../src/tui/types.ts";
+import { buildPaletteItems, resolveSlash, runCommandSubtask } from "../../src/tui/commands.ts";
+import type { CommandContext, PaletteItem } from "../../src/tui/types.ts";
+
+describe("resolveSlash", () => {
+  const items: PaletteItem[] = [
+    { id: "theme.toggle", title: "Toggle", slash: "theme-toggle", category: "Theme", run() {} },
+    { id: "cmd:review", title: "Review", slash: "review", category: "Custom", run() {} },
+    { id: "session.new", title: "New", slash: "new", category: "Session", aliases: ["clear"], run() {} },
+  ];
+  test("matches a bare command", () => {
+    expect(resolveSlash(items, "/theme-toggle")?.item.id).toBe("theme.toggle");
+  });
+  test("splits name and args", () => {
+    const r = resolveSlash(items, "/review HEAD~1");
+    expect(r?.item.id).toBe("cmd:review");
+    expect(r?.args).toBe("HEAD~1");
+  });
+  test("matches an alias", () => {
+    expect(resolveSlash(items, "/clear")?.item.id).toBe("session.new");
+  });
+  test("non-slash text and unknown commands return null", () => {
+    expect(resolveSlash(items, "hello")).toBeNull();
+    expect(resolveSlash(items, "/nope")).toBeNull();
+  });
+});
 import type { App } from "../../src/app.ts";
 import type { CommandDef } from "../../src/command/types.ts";
 import { EMPTY_USAGE, type Message, type SessionInfo } from "../../src/session/types.ts";

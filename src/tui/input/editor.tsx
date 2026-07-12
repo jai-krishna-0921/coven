@@ -132,14 +132,34 @@ export function PromptEditor({
           bump();
           return;
         }
-        if (key.tab || key.return) {
-          const chosen = comps[Math.min(selRef.current, comps.length - 1)];
-          if (chosen) {
-            const next = completeToken(buffer.value(), liveIdx, chosen.value);
-            buffer.setValue(next.value);
-          }
+        const chosen = comps[Math.min(selRef.current, comps.length - 1)];
+        if (key.tab && chosen) {
+          const next = completeToken(buffer.value(), liveIdx, chosen.value);
+          buffer.setValue(next.value);
           selRef.current = 0;
-          dismissedRef.current = false;
+          // A completed command hides the popover so the NEXT Enter submits/runs it;
+          // a completed file keeps editing (you're inserting it into a message).
+          dismissedRef.current = chosen.kind === "command";
+          bump();
+          return;
+        }
+        if (key.return && chosen) {
+          const next = completeToken(buffer.value(), liveIdx, chosen.value);
+          if (chosen.kind === "command") {
+            // Complete AND run the command in one Enter (matches user expectation).
+            const text = next.value.trim();
+            history.push(text);
+            buffer.setValue("");
+            selRef.current = 0;
+            dismissedRef.current = false;
+            bump();
+            onSubmit(text);
+            return;
+          }
+          // File completion: insert it, keep editing (don't submit the message yet).
+          buffer.setValue(next.value);
+          selRef.current = 0;
+          dismissedRef.current = true;
           bump();
           return;
         }

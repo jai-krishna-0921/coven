@@ -30,6 +30,27 @@ export async function runCommandSubtask(
   ctx.store.appendSynthetic({ ...result, sessionID: ctx.session.id });
 }
 
+/**
+ * Resolve a typed `/name args` line to the matching command + its args (§8.3/§9).
+ * Returns null for non-slash text or an unknown command. Matches on `slash` or `aliases`.
+ */
+export function resolveSlash(
+  items: PaletteItem[],
+  text: string,
+): { item: PaletteItem; args: string } | null {
+  const t = text.trim();
+  if (!t.startsWith("/")) return null;
+  const body = t.slice(1);
+  const sp = body.indexOf(" ");
+  const name = (sp === -1 ? body : body.slice(0, sp)).toLowerCase();
+  const args = sp === -1 ? "" : body.slice(sp + 1).trim();
+  if (!name) return null;
+  const item = items.find(
+    (i) => i.slash.toLowerCase() === name || i.aliases?.some((a) => a.toLowerCase() === name),
+  );
+  return item ? { item, args } : null;
+}
+
 /** One PaletteItem per `app.commands.all()` template (§9.2 step 2). */
 function templateItem(def: CommandDefLike): PaletteItem {
   const category: PaletteCategory = def.name === "init" || def.name === "review" ? "Prompt" : "Custom";
@@ -38,10 +59,10 @@ function templateItem(def: CommandDefLike): PaletteItem {
     title: def.description || def.name,
     slash: def.name,
     category,
-    async run(ctx) {
+    async run(ctx, args) {
       const commands = ctx.app.commands;
       if (!commands) return;
-      const text = await commands.expand(def, "", { root: ctx.app.loaded.root, gateShell: ctx.gateShell });
+      const text = await commands.expand(def, args ?? "", { root: ctx.app.loaded.root, gateShell: ctx.gateShell });
       if (def.subtask) {
         await runCommandSubtask(ctx, {
           agent: def.agent ?? ctx.session.agent,

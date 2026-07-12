@@ -15,7 +15,7 @@ function modelShort(model: string | undefined): string {
 
 export function Home() {
   const { theme, logo } = useTheme();
-  const { session } = useUi();
+  const { session, modelDisplay } = useUi();
 
   return (
     <Box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
@@ -26,7 +26,7 @@ export function Home() {
       <Box marginTop={1}>
         <Text color={theme.agent}>{session.agent}</Text>
         <Text color={theme.fgSubtle}> · </Text>
-        <Text color={theme.fgMuted}>{modelShort(session.model)}</Text>
+        <Text color={theme.fgMuted}>{modelShort(modelDisplay)}</Text>
       </Box>
       <Box marginTop={1}>
         <Text color={theme.fgSubtle}>tab agents · ctrl+p commands · ? help</Text>
