@@ -53,6 +53,7 @@ export interface UiState {
   toast: { text: string; kind: ToastKind } | null;
   changedFiles: string[];
   connectorReady: boolean;
+  modelDisplay: string;          // the "provider/model" actually in effect (override → session → config → default)
 }
 
 export interface CommandHost {           // App-local actions the App injects (Task 43)

@@ -15,6 +15,7 @@ import type { App } from "../app.ts";
 import type { BusEvent } from "../bus/index.ts";
 import type { PermissionRequest } from "../permission/types.ts";
 import { EMPTY_USAGE, type Message, type Part, type SessionInfo } from "../session/types.ts";
+import { DEFAULT_MODEL } from "../config/schema.ts";
 import type { ModalKind, ModalProps, ToastKind, UiState, UiStoreLike } from "./types.ts";
 
 const FLUSH_MS = 25;
@@ -62,6 +63,7 @@ export class UiStore implements UiStoreLike {
       toast: null,
       changedFiles: [],
       connectorReady: this.connectorReady(session),
+      modelDisplay: this.effectiveModel(session),
     };
     this.unsubscribe = app.bus.subscribe((event) => this.handle(event));
   }
@@ -142,6 +144,7 @@ export class UiStore implements UiStoreLike {
       changedFiles: [],
       scrollOffset: 0,
       connectorReady: this.connectorReady(session),
+      modelDisplay: this.effectiveModel(session),
     });
   }
 
@@ -193,6 +196,7 @@ export class UiStore implements UiStoreLike {
           session,
           context: this.app.engine.contextInfo(this.sessionID),
           connectorReady: this.connectorReady(session),
+          modelDisplay: this.effectiveModel(session),
         });
         return;
       }
@@ -213,6 +217,7 @@ export class UiStore implements UiStoreLike {
           session,
           context: this.app.engine.contextInfo(this.sessionID),
           connectorReady: this.connectorReady(session),
+          modelDisplay: this.effectiveModel(session),
           scrollOffset: this.clampScroll(history, null),
         });
         return;
@@ -341,6 +346,11 @@ export class UiStore implements UiStoreLike {
     const provider = modelRef?.split("/")[0];
     if (!provider) return false;
     return this.app.auth?.resolveKey(provider) !== undefined;
+  }
+
+  /** The "provider/model" actually in effect: per-session override → config → built-in default. */
+  private effectiveModel(session: SessionInfo): string {
+    return session.model ?? this.app.loaded?.config?.model ?? DEFAULT_MODEL;
   }
 
   private maxOffset(history: Message[], live: Message | null): number {

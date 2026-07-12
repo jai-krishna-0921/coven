@@ -38,6 +38,7 @@ function stateWith(history: Message[], live: Message | null, scrollOffset: numbe
     toast: null,
     changedFiles: [],
     connectorReady: true,
+    modelDisplay: "anthropic/claude-opus-4-8",
   };
 }
 

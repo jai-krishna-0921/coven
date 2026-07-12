@@ -31,6 +31,7 @@ function stateWith(permission: PermissionRequest | null): UiState {
     toast: null,
     changedFiles: [],
     connectorReady: true,
+    modelDisplay: "anthropic/claude-opus-4-8",
   };
 }
 

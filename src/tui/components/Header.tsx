@@ -16,7 +16,7 @@ function modelShort(model: string | undefined): string {
 
 export function Header() {
   const { theme, icons } = useTheme();
-  const { session } = useUi();
+  const { session, modelDisplay } = useUi();
   const { stdout } = useStdout();
   const width = stdout?.columns ?? 80;
 
@@ -28,7 +28,7 @@ export function Header() {
         </Text>
         <Text color={theme.fgMuted}>
           {"  "}
-          {modelShort(session.model)} · {session.agent} · {session.title}
+          {modelShort(modelDisplay)} · {session.agent} · {session.title}
         </Text>
       </Box>
       <Text color={theme.border}>{"─".repeat(Math.max(1, width))}</Text>

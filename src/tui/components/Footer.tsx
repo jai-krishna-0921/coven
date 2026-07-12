@@ -28,7 +28,7 @@ function Sep() {
 
 export function Footer() {
   const { theme, icons } = useTheme();
-  const { session, context } = useUi();
+  const { session, context, modelDisplay } = useUi();
   const cost = session.cost ?? 0;
 
   return (
@@ -46,7 +46,7 @@ export function Footer() {
         {icons.ok} no diagnostics
       </Text>
       <Sep />
-      <Text color={theme.fgMuted}>{modelShort(session.model)}</Text>
+      <Text color={theme.fgMuted}>{modelShort(modelDisplay)}</Text>
     </Box>
   );
 }

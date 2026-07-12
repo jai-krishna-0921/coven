@@ -40,6 +40,7 @@ function stateWith(session: SessionInfo): UiState {
     toast: null,
     changedFiles: [],
     connectorReady: true,
+    modelDisplay: "anthropic/claude-opus-4-8",
   };
 }
 

@@ -23,6 +23,7 @@ function stateWith(session: SessionInfo): UiState {
     toast: null,
     changedFiles: [],
     connectorReady: true,
+    modelDisplay: session.model ?? "default",
   };
 }
 

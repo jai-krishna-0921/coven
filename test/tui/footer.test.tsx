@@ -26,6 +26,7 @@ function stateWith(session: SessionInfo, context: UiState["context"]): UiState {
     toast: null,
     changedFiles: [],
     connectorReady: true,
+    modelDisplay: session.model ?? "default",
   };
 }
 
