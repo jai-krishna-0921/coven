@@ -122,11 +122,16 @@ export class SessionEngine {
   }
 
   /** Run one user turn to completion. Returns the final assistant message. */
-  async prompt(sessionID: string, text: string, abort: AbortSignal): Promise<Message> {
+  async prompt(
+    sessionID: string,
+    text: string,
+    abort: AbortSignal,
+    override?: { agent?: string; model?: string },
+  ): Promise<Message> {
     const session = this.o.store.get(sessionID);
     if (!session) throw new Error(`No session ${sessionID}`);
-    const agent = this.o.agents.get(session.agent);
-    if (!agent) throw new Error(`No agent "${session.agent}"`);
+    const agent = this.o.agents.get(override?.agent ?? session.agent);
+    if (!agent) throw new Error(`No agent "${override?.agent ?? session.agent}"`);
 
     if (session.title === "New session") {
       session.title = text.length > 64 ? text.slice(0, 61) + "…" : text;
@@ -145,7 +150,7 @@ export class SessionEngine {
     this.o.bus.publish({ type: "session.status", sessionID, status: "busy" });
 
     try {
-      return await this.runLoop(sessionID, agent, abort);
+      return await this.runLoop(sessionID, agent, abort, override);
     } finally {
       this.o.bus.publish({ type: "session.status", sessionID, status: "idle" });
       this.o.store.update(session);
@@ -180,9 +185,14 @@ export class SessionEngine {
     return this.o.modelMeta?.(providerID, modelID) ?? DEFAULT_META;
   }
 
-  private async runLoop(sessionID: string, agent: AgentInfo, abort: AbortSignal): Promise<Message> {
+  private async runLoop(
+    sessionID: string,
+    agent: AgentInfo,
+    abort: AbortSignal,
+    override?: { agent?: string; model?: string },
+  ): Promise<Message> {
     const session = this.o.store.get(sessionID)!;
-    const modelRef = agent.model ?? this.o.config.model ?? DEFAULT_MODEL;
+    const modelRef = override?.model ?? session.model ?? agent.model ?? this.o.config.model ?? DEFAULT_MODEL;
     const { adapter, ref } = this.o.providers.resolve(modelRef);
     const meta = this.meta(ref.providerID, ref.modelID);
     const maxSteps = agent.steps ?? this.o.config.max_steps ?? DEFAULT_MAX_STEPS;
