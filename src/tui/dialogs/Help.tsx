@@ -155,6 +155,7 @@ export function Help({ ctx }: { ctx: CommandContext }) {
       width={panelW}
       borderStyle={borders as "round" | "classic"}
       borderColor={theme.borderFocus}
+      backgroundColor={theme.bgPanel}
       paddingX={1}
     >
       <Box justifyContent="space-between">

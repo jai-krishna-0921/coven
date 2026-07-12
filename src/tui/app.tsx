@@ -25,7 +25,7 @@ import type { Message } from "../session/types.ts";
 import { createId } from "../util/id.ts";
 import { spawnCapture } from "../util/proc.ts";
 import { scanBashCommand } from "../tool/bash-scan.ts";
-import { ThemeProvider, UiProvider, useUi } from "./context.tsx";
+import { ThemeProvider, UiProvider, useTheme, useUi } from "./context.tsx";
 import { UiStore } from "./store.ts";
 import { loadPrefs, savePrefs, type UiPrefs } from "./prefs.ts";
 import { resolveKey, type KeyObject } from "./keymap.ts";
@@ -161,6 +161,7 @@ function AppShell({
   setPrefs(patch: Partial<UiPrefs>): void;
 }) {
   const state = useUi();
+  const { theme } = useTheme();
   const { exit } = useApp();
   const { rows, columns } = useWindowSize();
   const [editorEpoch, setEditorEpoch] = useState(0);
@@ -423,11 +424,15 @@ function AppShell({
   );
 
   if (onboarding) {
-    return <OnboardingWizard ctx={ctx} onDone={() => store.setReonboarding(false)} />;
+    return (
+      <Box width={columns} height={rows} backgroundColor={theme.bg}>
+        <OnboardingWizard ctx={ctx} onDone={() => store.setReonboarding(false)} />
+      </Box>
+    );
   }
 
   return (
-    <Box flexDirection="column" width={columns} height={rows}>
+    <Box flexDirection="column" width={columns} height={rows} backgroundColor={theme.bg}>
       <Header />
       <Box flexGrow={1} flexDirection="row">
         <Box flexGrow={1} flexDirection="column">

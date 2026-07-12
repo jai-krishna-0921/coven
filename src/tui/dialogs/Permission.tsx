@@ -58,7 +58,7 @@ export function Permission() {
   const dangerous = request.metadata?.["dangerous"] === true;
 
   return (
-    <Box flexDirection="column" borderStyle={borders as "round" | "classic"} borderColor={dangerous ? theme.error : theme.borderFocus} paddingX={1}>
+    <Box flexDirection="column" borderStyle={borders as "round" | "classic"} borderColor={dangerous ? theme.error : theme.borderFocus} backgroundColor={theme.bgPanel} paddingX={1}>
       {dangerous ? (
         <Text backgroundColor={theme.error} color={theme.selectionFg} bold>
           {icons.warn} DANGEROUS

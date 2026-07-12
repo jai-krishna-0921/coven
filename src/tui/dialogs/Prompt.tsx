@@ -61,7 +61,7 @@ export function Prompt({
   const display = mask ? "•".repeat(value.length) : value;
 
   return (
-    <Box flexDirection="column" borderStyle={borders as "round" | "classic"} borderColor={theme.borderFocus} paddingX={1}>
+    <Box flexDirection="column" borderStyle={borders as "round" | "classic"} borderColor={theme.borderFocus} backgroundColor={theme.bgPanel} paddingX={1}>
       <Text color={theme.accent}>{message}</Text>
       <Text>
         <Text color={theme.fgSubtle}>{icons.prompt} </Text>

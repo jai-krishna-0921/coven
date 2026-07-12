@@ -27,6 +27,7 @@ export function Banner({ text, kind }: { text: string; kind: ToastKind }) {
     <Box
       borderStyle={borders as "round" | "classic"}
       borderColor={color}
+      backgroundColor={theme.bgPanel}
       paddingX={1}
     >
       <Text color={color}>

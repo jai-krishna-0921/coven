@@ -66,7 +66,7 @@ export function Skills({ ctx }: { ctx: CommandContext }) {
     .slice(0, PREVIEW_LINES);
 
   return (
-    <Box flexDirection="column" borderStyle={borders as "round" | "classic"} borderColor={theme.borderFocus} paddingX={1}>
+    <Box flexDirection="column" borderStyle={borders as "round" | "classic"} borderColor={theme.borderFocus} backgroundColor={theme.bgPanel} paddingX={1}>
       <Text color={theme.accent} bold>
         Skills
       </Text>
