@@ -45,6 +45,24 @@ const log = createLogger("loop");
 /** Tools with no side effects — safe to run concurrently within a turn. */
 const PARALLEL_SAFE = new Set(["read", "ls", "glob", "grep", "webfetch", "skill"]);
 
+/** Max nesting of subagent dispatch (root=0). Guards against a fork-bomb. */
+export const MAX_SUBAGENT_DEPTH = 3;
+
+/** Walk the parent chain to a session's dispatch depth; cycle-safe. */
+export function sessionDepth(lookup: (id: string) => { parentID?: string } | undefined, sessionID: string): number {
+  let depth = 0;
+  let id: string | undefined = sessionID;
+  const seen = new Set<string>();
+  while (id && !seen.has(id)) {
+    seen.add(id);
+    const parent: string | undefined = lookup(id)?.parentID;
+    if (!parent) break;
+    depth++;
+    id = parent;
+  }
+  return depth;
+}
+
 type PendingCall = { callID: string; tool: string; args: unknown };
 
 /**
@@ -656,6 +674,10 @@ export class SessionEngine {
     }
     if (agentInfo.mode === "primary") {
       return `Error: agent "${input.agent}" is primary-only and cannot be dispatched as a subagent.`;
+    }
+    // Fork-bomb guard: cap how deeply subagents may dispatch subagents.
+    if (sessionDepth((id) => this.o.store.get(id), parentID) >= MAX_SUBAGENT_DEPTH) {
+      return `Error: subagent depth limit (${MAX_SUBAGENT_DEPTH}) reached — do this work directly instead of dispatching another subagent.`;
     }
     const child = this.o.store.create({ agent: input.agent, parentID, title: input.description });
     this.o.bus.publish({ type: "session.created", session: child });

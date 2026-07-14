@@ -40,7 +40,20 @@ export const readTool = defineTool({
       return { title: path.display, output: `File too large (${stat.size} bytes). Use offset/limit or grep.` };
     }
 
-    const lines = readFileSync(path.absolute, "utf8").split("\n");
+    // Detect binaries before decoding, so we never hand the model mojibake.
+    const buf = readFileSync(path.absolute);
+    if (buf.subarray(0, 8192).includes(0)) {
+      return {
+        title: path.display,
+        output: `Binary file (${buf.length} bytes) — not shown. Use a dedicated tool if you need its bytes.`,
+        metadata: { binary: true },
+      };
+    }
+    const content = buf.toString("utf8");
+    const lines = content.split("\n");
+    // A file ending in a newline splits to a trailing "" — drop it so line
+    // counts and offsets are accurate.
+    if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
     const offset = args.offset ?? 1;
     const limit = args.limit ?? DEFAULT_LIMIT;
     const slice = lines.slice(offset - 1, offset - 1 + limit);

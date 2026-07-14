@@ -44,6 +44,23 @@ describe("read tool secret denylist", () => {
   });
 });
 
+describe("read tool robustness", () => {
+  test("reports a binary file instead of returning mojibake", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "coven-bin-"));
+    writeFileSync(join(dir, "blob.dat"), Buffer.from([0x00, 0x01, 0x02, 0xff, 0x00, 0x42]));
+    const r = await readTool.execute({ filePath: "blob.dat" }, ctx(dir));
+    expect(r.output.toLowerCase()).toContain("binary file");
+    expect(r.metadata?.binary).toBe(true);
+  });
+
+  test("does not inflate the line count for a trailing newline", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "coven-nl-"));
+    writeFileSync(join(dir, "three.txt"), "a\nb\nc\n");
+    const r = await readTool.execute({ filePath: "three.txt" }, ctx(dir));
+    expect(r.metadata?.lines).toBe(3);
+  });
+});
+
 describe("webfetch SSRF guard", () => {
   const blocked = [
     "http://localhost/x",

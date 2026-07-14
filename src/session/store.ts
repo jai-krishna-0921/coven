@@ -4,12 +4,15 @@
  *   messages.jsonl  — one Message per line, append-ordered
  * Messages are rewritten in full on update (files are small; simplicity wins).
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { createId } from "../util/id.ts";
+import { createLogger } from "../util/log.ts";
 import { EMPTY_USAGE, type Message, type SessionInfo } from "./types.ts";
+
+const log = createLogger("store");
 
 function projectSlug(root: string): string {
   const base = root.split("/").filter(Boolean).pop() ?? "root";
@@ -91,17 +94,33 @@ export class SessionStore {
     return join(this.baseDir, sessionID);
   }
 
+  private persistDisabled = false;
+
+  /**
+   * Atomic (tmp + rename) best-effort write. A read-only HOME must not crash the
+   * session — persistence disables itself on the first failure; the session
+   * still runs, just in-memory.
+   */
+  private safeWrite(dir: string, file: string, content: string): void {
+    if (this.persistDisabled) return;
+    try {
+      mkdirSync(dir, { recursive: true });
+      const tmp = join(dir, `.${file}.${process.pid}.tmp`);
+      writeFileSync(tmp, content);
+      renameSync(tmp, join(dir, file));
+    } catch (error) {
+      this.persistDisabled = true;
+      log.warn("session persistence disabled — running in memory only", { error: String(error) });
+    }
+  }
+
   private persistInfo(session: SessionInfo): void {
-    const dir = this.dirOf(session.id);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "info.json"), JSON.stringify(session, null, 2));
+    this.safeWrite(this.dirOf(session.id), "info.json", JSON.stringify(session, null, 2));
   }
 
   private persistMessages(sessionID: string): void {
-    const dir = this.dirOf(sessionID);
-    mkdirSync(dir, { recursive: true });
     const lines = (this.messages.get(sessionID) ?? []).map((m) => JSON.stringify(m)).join("\n");
-    writeFileSync(join(dir, "messages.jsonl"), lines + (lines ? "\n" : ""));
+    this.safeWrite(this.dirOf(sessionID), "messages.jsonl", lines + (lines ? "\n" : ""));
   }
 
   private loadSession(sessionID: string): void {
