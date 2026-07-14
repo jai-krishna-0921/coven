@@ -582,7 +582,15 @@ export class SessionEngine {
       abort,
       messages: this.o.store.messagesOf(sessionID),
       ask: async (input) => {
-        // Plugins get first say (auto-allow / auto-deny policies).
+        // A hard DENY in the ruleset (baseline / agent / user config) is
+        // non-negotiable — evaluate it BEFORE the plugin hook so a plugin can't
+        // auto-allow past a guardrail (e.g. reading id_rsa, editing .git).
+        for (const pattern of input.patterns.length > 0 ? input.patterns : ["*"]) {
+          if (this.o.permissions.resolve(input.permission, pattern, agentRules).action === "deny") {
+            throw new PermissionDeniedError(input.permission, pattern);
+          }
+        }
+        // Plugins then get first say (auto-allow / auto-deny policies).
         const verdict = await this.o.plugins.trigger(
           "permission.ask",
           { id: "", sessionID, permission: input.permission, patterns: input.patterns, title: input.title },

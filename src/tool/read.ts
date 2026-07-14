@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { z } from "zod";
 import { defineTool, truncateOutput } from "./types.ts";
-import { resolvePath } from "./path.ts";
+import { resolvePath, isSensitiveFile } from "./path.ts";
 
 const DEFAULT_LIMIT = 2000;
 const MAX_LINE_LENGTH = 2000;
@@ -17,6 +17,15 @@ export const readTool = defineTool({
   }),
   async execute(args, ctx) {
     const path = resolvePath(ctx.root, args.filePath);
+    // Hard guardrail (independent of permission rules / --yes): never hand the
+    // model a private key, .env, or credential store.
+    if (isSensitiveFile(path.absolute)) {
+      return {
+        title: path.display,
+        output: `Refused: ${path.display} looks like a secret/credential file (private key, .env, .ssh, credentials). Reading it is blocked.`,
+        metadata: { isError: true, refused: true },
+      };
+    }
     await ctx.ask({
       permission: path.external ? "external_directory" : "read",
       patterns: [path.display],
