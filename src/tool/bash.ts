@@ -5,6 +5,8 @@ import { spawnCapture } from "../util/proc.ts";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
+/** Cap captured output so a runaway command can't OOM the process. */
+const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
 export const bashTool = defineTool({
   id: "bash",
@@ -31,11 +33,13 @@ export const bashTool = defineTool({
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
       timeoutMs: Math.min(args.timeout ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS),
       signal: ctx.abort,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
     });
 
     let output = "";
     if (result.stdout) output += result.stdout;
     if (result.stderr) output += (output ? "\n--- stderr ---\n" : "") + result.stderr;
+    if (result.truncated) output += "\n(killed: output exceeded 8MB — narrow the command or redirect to a file)";
     if (result.timedOut) output += "\n(killed: timeout exceeded)";
     else if (result.exitCode !== 0) output += `\n(exit code ${result.exitCode})`;
     return {
