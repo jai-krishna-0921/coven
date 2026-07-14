@@ -6,6 +6,7 @@
 import type { Message, Part, SessionInfo } from "../session/types.ts";
 import type { PermissionRequest } from "../permission/types.ts";
 import type { McpServerStatus } from "../mcp/types.ts";
+import type { LspServerStatus } from "../lsp/types.ts";
 import { createLogger } from "../util/log.ts";
 
 export type BusEvent =
@@ -22,7 +23,9 @@ export type BusEvent =
   | { type: "permission.replied"; requestID: string; reply: "once" | "always" | "reject" }
   | { type: "session.compacting"; sessionID: string }
   | { type: "session.compacted"; sessionID: string; tokensBefore: number }
-  | { type: "mcp.status"; status: McpServerStatus };
+  | { type: "mcp.status"; status: McpServerStatus }
+  | { type: "lsp.status"; status: LspServerStatus }
+  | { type: "lsp.diagnostics"; uri: string; count: number };
 
 export type BusEventType = BusEvent["type"];
 

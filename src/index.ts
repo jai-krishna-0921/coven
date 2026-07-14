@@ -209,6 +209,23 @@ Voice:  /voice in the TUI (say / espeak / piper / PowerShell / OpenAI TTS)`);
     }
     return;
   }
+  if (command === "lsp") {
+    const app = await createApp();
+    try {
+      const servers = app.lsp?.status() ?? [];
+      if (servers.length === 0) {
+        console.log(dim('no LSP servers configured — add an "lsp" block to coven.json'));
+        return;
+      }
+      for (const s of servers) {
+        const mark = s.state === "ready" ? green("●") : s.state === "error" ? red("✗") : yellow("…");
+        console.log(`${mark} ${bold(s.language.padEnd(14))} ${dim(`${s.command} · ${s.state}${s.error ? ` · ${s.error}` : ""}`)}`);
+      }
+    } finally {
+      await app.dispose();
+    }
+    return;
+  }
   if (command === "auth") {
     await authCommand(positional);
     return;

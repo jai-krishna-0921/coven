@@ -13,6 +13,7 @@ import type { Ruleset } from "./permission/types.ts";
 import { PluginHost } from "./plugin/index.ts";
 import { ProviderRegistry } from "./provider/index.ts";
 import { McpHost } from "./mcp/index.ts";
+import { LspHost } from "./lsp/index.ts";
 import { SessionEngine } from "./session/loop.ts";
 import { SessionStore } from "./session/store.ts";
 import { SkillRegistry } from "./skill/index.ts";
@@ -112,6 +113,7 @@ export interface App {
   tts?: TtsLike;
   commands?: CommandsLike;
   mcp?: McpHost;
+  lsp?: LspHost;
   dispose(): Promise<void>;
 }
 
@@ -133,6 +135,7 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
   const tts = new Tts(loaded.config.tts ?? {});
   const store = new SessionStore(loaded.root);
   const mcp = new McpHost(loaded.config.mcp, bus);
+  const lsp = new LspHost(loaded.config.lsp, loaded.root, bus);
   const engine = new SessionEngine({
     config: loaded.config,
     root: loaded.root,
@@ -149,10 +152,11 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
     },
   });
 
-  // Connect MCP servers and register their tools before the first turn. Failures
-  // are isolated per server; an absent `mcp` config makes this a no-op.
-  await mcp.connectAll();
+  // Connect MCP + LSP servers and register their tools before the first turn.
+  // Failures are isolated per server; absent config makes each a no-op.
+  await Promise.all([mcp.connectAll(), lsp.startAll()]);
   for (const tool of mcp.toolDefs()) engine.tools.register(tool);
+  for (const tool of lsp.toolDefs()) engine.tools.register(tool);
 
   return {
     loaded,
@@ -169,9 +173,11 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
     tts,
     commands,
     mcp,
+    lsp,
     dispose: async () => {
       tts.stop();
       await mcp.dispose();
+      await lsp.dispose();
       await plugins.dispose();
     },
   };

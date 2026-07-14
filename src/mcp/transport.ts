@@ -56,6 +56,7 @@ export class StdioTransport implements Transport {
     const child = spawn(this.command, this.args, {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, ...this.env },
+      detached: process.platform !== "win32", // own process group so close() kills the tree
     });
     this.child = child;
     child.on("error", (error) => this.fail(`spawn failed: ${String(error)}`));
