@@ -69,7 +69,7 @@ export class PermissionEngine {
    * Gate an action. Throws PermissionDeniedError on deny, PermissionRejectedError
    * on user rejection; resolves silently when allowed.
    */
-  async ask(sessionID: string, input: AskInput, agentRules: Ruleset = []): Promise<void> {
+  async ask(sessionID: string, input: AskInput, agentRules: Ruleset = [], signal?: AbortSignal): Promise<void> {
     const needsAsk: string[] = [];
     for (const pattern of input.patterns.length > 0 ? input.patterns : ["*"]) {
       const rule = this.resolve(input.permission, pattern, agentRules);
@@ -77,6 +77,8 @@ export class PermissionEngine {
       if (rule.action === "ask") needsAsk.push(pattern);
     }
     if (needsAsk.length === 0) return;
+    // Already interrupted before we even prompt — don't wedge on a Deferred.
+    if (signal?.aborted) throw new PermissionRejectedError("interrupted");
 
     const request: PermissionRequest = {
       id: createId("perm"),
@@ -88,6 +90,20 @@ export class PermissionEngine {
     };
     const deferred = new Deferred<void>();
     this.pending.set(request.id, { request, deferred });
+
+    // An interrupt (Ctrl-C / turn abort) while this prompt is pending must reject
+    // it, or the tool call — and the whole turn loop — blocks forever.
+    if (signal) {
+      const onAbort = () => {
+        if (this.pending.delete(request.id)) {
+          this.bus.publish({ type: "permission.replied", requestID: request.id, reply: "reject" });
+          deferred.reject(new PermissionRejectedError("interrupted"));
+        }
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      void deferred.promise.finally(() => signal.removeEventListener("abort", onAbort)).catch(() => {});
+    }
+
     this.bus.publish({ type: "permission.asked", request });
     return deferred.promise;
   }

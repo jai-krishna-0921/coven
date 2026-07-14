@@ -70,6 +70,25 @@ describe("PermissionEngine.ask", () => {
     await engine.ask("ses_1", { permission: "bash", patterns: ["make"], title: "make" });
   });
 
+  test("an abort signal rejects a pending ask so the turn can unwind", async () => {
+    const engine = new PermissionEngine(new Bus(), []);
+    const ctrl = new AbortController();
+    const pending = engine.ask("ses_1", { permission: "bash", patterns: ["rm -rf x"], title: "danger" }, [], ctrl.signal);
+    expect(engine.pendingRequests()).toHaveLength(1);
+    ctrl.abort();
+    await expect(pending).rejects.toBeInstanceOf(PermissionRejectedError);
+    expect(engine.pendingRequests()).toHaveLength(0);
+  });
+
+  test("an already-aborted signal rejects the ask immediately", async () => {
+    const engine = new PermissionEngine(new Bus(), []);
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(
+      engine.ask("ses_1", { permission: "bash", patterns: ["make"], title: "x" }, [], ctrl.signal),
+    ).rejects.toBeInstanceOf(PermissionRejectedError);
+  });
+
   test("always settles concurrent identical pendings without a second prompt", async () => {
     const bus = new Bus();
     const engine = new PermissionEngine(bus, []);

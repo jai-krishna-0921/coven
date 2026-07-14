@@ -590,7 +590,7 @@ export class SessionEngine {
         );
         if (verdict.action === "allow") return;
         if (verdict.action === "deny") throw new PermissionDeniedError(input.permission, input.patterns[0] ?? "*");
-        await this.o.permissions.ask(sessionID, input, agentRules);
+        await this.o.permissions.ask(sessionID, input, agentRules, abort);
       },
       progress: (title) => {
         this.o.bus.publish({ type: "tool.started", sessionID, callID: call.callID, tool: title });
