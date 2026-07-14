@@ -14,6 +14,8 @@ const KNOWN_BASE_URLS: Record<string, string> = {
   groq: "https://api.groq.com/openai/v1",
   openrouter: "https://openrouter.ai/api/v1",
   ollama: "http://localhost:11434/v1",
+  // Ollama's hosted cloud (OpenAI-compatible); override in coven.json if it moves.
+  "ollama-cloud": "https://ollama.com/v1",
 };
 
 const KNOWN_KEY_ENVS: Record<string, string> = {
@@ -21,6 +23,7 @@ const KNOWN_KEY_ENVS: Record<string, string> = {
   openai: "OPENAI_API_KEY",
   groq: "GROQ_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
+  "ollama-cloud": "OLLAMA_API_KEY",
 };
 
 export class ProviderRegistry {

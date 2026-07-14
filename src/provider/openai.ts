@@ -53,53 +53,129 @@ function toWireMessages(system: string, messages: ModelMessage[]): WireMessage[]
   return wire;
 }
 
+/** Transient HTTP statuses worth retrying (overload / gateway / rate-limit). */
+const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504, 529]);
+const MAX_RETRIES = 3;
+/** No bytes for this long (connect or between chunks) → abort the request. */
+const IDLE_TIMEOUT_MS = 120_000;
+const CONNECT_TIMEOUT_MS = 60_000;
+
+const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
 export class OpenAICompatAdapter implements ProviderAdapter {
   constructor(
     readonly id: string,
-    private options: { apiKey?: string; baseUrl: string },
+    private options: { apiKey?: string; baseUrl: string; fetchImpl?: typeof fetch; retryBaseMs?: number },
   ) {}
 
+  /** Exponential backoff with jitter, capped at 8s. */
+  private backoff(attempt: number): number {
+    const base = this.options.retryBaseMs ?? 500;
+    return Math.min(base * 2 ** attempt, 8_000) + Math.floor(Math.random() * 100);
+  }
+
   async *stream(input: StreamInput): AsyncGenerator<LLMEvent, void, void> {
-    const response = await fetch(`${this.options.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(this.options.apiKey ? { authorization: `Bearer ${this.options.apiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        model: input.model,
-        stream: true,
-        stream_options: { include_usage: true },
-        messages: toWireMessages(input.system, input.messages),
-        ...(input.tools.length > 0
-          ? {
-              tools: input.tools.map((tool) => ({
-                type: "function",
-                function: { name: tool.name, description: tool.description, parameters: { type: "object", ...tool.parameters } },
-              })),
-            }
-          : {}),
-        ...(input.maxTokens !== undefined ? { max_tokens: input.maxTokens } : {}),
-        ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
-      }),
-      signal: input.abort,
+    const doFetch = this.options.fetchImpl ?? fetch;
+    const url = `${this.options.baseUrl.replace(/\/$/, "")}/chat/completions`;
+    const headers = {
+      "content-type": "application/json",
+      ...(this.options.apiKey ? { authorization: `Bearer ${this.options.apiKey}` } : {}),
+    };
+    const body = JSON.stringify({
+      model: input.model,
+      stream: true,
+      stream_options: { include_usage: true },
+      messages: toWireMessages(input.system, input.messages),
+      ...(input.tools.length > 0
+        ? {
+            tools: input.tools.map((tool) => ({
+              type: "function",
+              function: { name: tool.name, description: tool.description, parameters: { type: "object", ...tool.parameters } },
+            })),
+          }
+        : {}),
+      ...(input.maxTokens !== undefined ? { max_tokens: input.maxTokens } : {}),
+      ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
     });
 
-    if (!response.ok || !response.body) {
-      throw new ProviderError(this.id, `HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+    // One controller drives both the idle timeout and the caller's abort, so a
+    // hung endpoint (local Ollama/vLLM that never responds) can't wedge the turn.
+    const ctrl = new AbortController();
+    const onOuterAbort = () => ctrl.abort();
+    if (input.abort) {
+      if (input.abort.aborted) ctrl.abort();
+      else input.abort.addEventListener("abort", onOuterAbort, { once: true });
     }
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    const armIdle = (ms: number) => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => ctrl.abort(), ms);
+    };
 
+    try {
+      // --- connect, with bounded retry on transient failures (nothing emitted yet) ---
+      let response: Response | undefined;
+      for (let attempt = 0; ; attempt++) {
+        armIdle(CONNECT_TIMEOUT_MS);
+        let res: Response;
+        try {
+          res = await doFetch(url, { method: "POST", headers, body, signal: ctrl.signal });
+        } catch (error) {
+          if (input.abort?.aborted) throw new ProviderError(this.id, "request aborted");
+          if (attempt < MAX_RETRIES) {
+            await delay(this.backoff(attempt));
+            continue;
+          }
+          throw new ProviderError(this.id, `network error after ${attempt + 1} attempts: ${String(error)}`);
+        }
+        if (res.ok && res.body) {
+          response = res;
+          break;
+        }
+        const text = await res.text().catch(() => "");
+        if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_RETRIES) {
+          const retryAfter = Number(res.headers.get("retry-after"));
+          await delay(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : this.backoff(attempt));
+          continue;
+        }
+        throw new ProviderError(this.id, `HTTP ${res.status}: ${text.slice(0, 500)}`);
+      }
+
+      yield* this.consume(response!, input, ctrl, armIdle);
+    } finally {
+      if (idleTimer) clearTimeout(idleTimer);
+      input.abort?.removeEventListener("abort", onOuterAbort);
+    }
+  }
+
+  private async *consume(
+    response: Response,
+    input: StreamInput,
+    ctrl: AbortController,
+    armIdle: (ms: number) => void,
+  ): AsyncGenerator<LLMEvent, void, void> {
     const toolCalls = new Map<number, { id: string; name: string; args: string }>();
     let textOpen = false;
     let finishReason: "stop" | "tool-calls" | "length" = "stop";
     let usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
+    if (!response.body) throw new ProviderError(this.id, "empty response body");
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
 
     while (true) {
-      const { done, value } = await reader.read();
+      armIdle(IDLE_TIMEOUT_MS);
+      let done: boolean;
+      let value: Uint8Array | undefined;
+      try {
+        ({ done, value } = await reader.read());
+      } catch (error) {
+        // Distinguish a caller-driven cancel from our idle-timeout abort.
+        if (input.abort?.aborted) throw new ProviderError(this.id, "request aborted");
+        if (ctrl.signal.aborted) throw new ProviderError(this.id, "stream idle timeout — no data from provider");
+        throw new ProviderError(this.id, `stream error: ${String(error)}`);
+      }
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");

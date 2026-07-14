@@ -118,7 +118,9 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
   const bus = new Bus();
   const auth = new AuthStore();
   const permissions = new PermissionEngine(bus, [...BASELINE_RULES, ...rulesFromConfig(loaded.config.permission)]);
-  const providers = new ProviderRegistry(loaded.config, (providerID) => auth.get(providerID));
+  // BYOK: resolve through the auth layer (env vars AND stored auth.json), not just
+  // stored keys, so e.g. OLLAMA_API_KEY / GROQ_API_KEY in the environment work.
+  const providers = new ProviderRegistry(loaded.config, (providerID) => auth.resolveKey(providerID)?.key);
   const agents = new AgentRegistry(loaded.config, loaded.root);
   const [skills, plugins, catalog, commands] = await Promise.all([
     SkillRegistry.load(loaded.config, loaded.root),
