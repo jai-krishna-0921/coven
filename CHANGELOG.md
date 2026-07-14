@@ -3,6 +3,48 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] — 2026-07-14
+
+### Added
+- **MCP client.** Connect external Model Context Protocol servers and use their
+  tools. Config `"mcp"` block per server — local **stdio** (`command`/`args`/`env`)
+  or remote **HTTP/SSE** (`url`/`type`/`headers`). Each tool is bridged as
+  `mcp__<server>__<tool>`, permission-gated under `mcp`, presenting its real JSON
+  Schema to the model. `coven mcp` lists connected servers and tools. A dead
+  server surfaces as tool-error output, never a turn crash.
+- **LSP integration.** Run language servers for semantic code understanding.
+  Config `"lsp"` block per language (`command`/`args`/`extensions`). Adds four
+  agent tools — `lsp_diagnostics`, `lsp_hover`, `lsp_definition`,
+  `lsp_references` (1-based positions matching the read tool). `coven lsp` lists
+  servers. Diagnostics stream in via `publishDiagnostics`.
+
+### Fixed
+- **Bash reliability.** Commands run in their own process group and are killed as
+  a tree on timeout/abort — a backgrounded child (`cmd &`, a dev server) no
+  longer holds the pipe and hangs the turn. Output is byte-capped (8 MB) so a
+  runaway producer can't OOM the process.
+- **Provider resilience.** The OpenAI-compat adapter retries transient failures
+  (429/5xx/529) with backoff and enforces a connect + idle-stream timeout, so one
+  overload no longer kills a turn and a hung local endpoint can't wedge it.
+- **`ollama-cloud` connects** — it had no base URL and didn't read
+  `OLLAMA_API_KEY`; BYOK now resolves env vars + stored keys through the auth layer.
+- **Interrupt during a permission prompt** now cancels the pending ask instead of
+  hanging the session forever.
+- **Malformed `coven.json` degrades** to defaults (with a warning) instead of
+  bricking every command; a single trailing comma is tolerated.
+- **Crash guards:** read-only-HOME-safe logging and session persistence (atomic,
+  self-disabling), isolated plugin event-hook rejections, a piper-TTS `error`
+  listener, and a global unhandled-rejection / uncaught-exception net that
+  restores the terminal.
+
+### Security
+- The **read tool** hard-refuses private keys / `.env` / `.ssh` / credentials
+  before any permission check (no exfiltration even under `--yes`).
+- **webfetch** blocks SSRF (loopback / RFC1918 / link-local incl. cloud metadata),
+  re-validates every redirect hop, and caps the body at 5 MB.
+- A hard **deny** in the permission ruleset can no longer be overridden by a
+  plugin hook. Subagent dispatch depth is capped (fork-bomb guard).
+
 ## [0.3.1] — 2026-07-12
 
 ### Fixed

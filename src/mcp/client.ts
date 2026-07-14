@@ -80,7 +80,7 @@ export class McpClient {
     await this.request("initialize", {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
-      clientInfo: { name: "coven", version: "0.3.1" },
+      clientInfo: { name: "coven", version: "0.4.0" },
     });
     this.notify("notifications/initialized");
     log.debug("mcp: initialized");

@@ -1,6 +1,6 @@
 {
   "name": "thecoven",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "A coven of coding agents in your terminal — multi-agent, skill-driven, guarded.",
   "type": "module",
   "license": "MIT",
