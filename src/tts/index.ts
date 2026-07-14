@@ -277,11 +277,28 @@ export class Tts {
         const player = spawn("aplay", ["-q", "-r", "22050", "-f", "S16_LE", "-t", "raw", "-"], {
           stdio: ["pipe", "ignore", "ignore"],
         });
+        // A missing `piper` binary (ENOENT) or a broken pipe when aplay dies must
+        // degrade quietly — an unhandled 'error' on the child or its streams
+        // would otherwise crash the whole process.
+        const swallow = () => {};
+        piper.stdin?.on("error", swallow);
+        piper.stdout.on("error", swallow);
+        player.stdin?.on("error", swallow);
         piper.stdout.pipe(player.stdin!);
         piper.stdin?.write(text);
         piper.stdin?.end();
         this.current = piper;
-        await new Promise<void>((resolve) => player.on("close", () => resolve()).on("error", () => resolve()));
+        await new Promise<void>((resolve) => {
+          let done = false;
+          const finish = () => {
+            if (!done) {
+              done = true;
+              resolve();
+            }
+          };
+          piper.on("error", finish);
+          player.on("close", finish).on("error", finish);
+        });
         this.current = undefined;
         return;
       }

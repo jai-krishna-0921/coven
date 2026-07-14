@@ -46,7 +46,20 @@ export class PluginHost {
         host.loadedNames.push(spec);
         if (hooks.event) {
           const eventHook = hooks.event.bind(hooks);
-          bus.subscribe((event) => void eventHook(event));
+          bus.subscribe((event) => {
+            // A rejecting async hook must not become a process-killing
+            // unhandledRejection — isolate and log it.
+            try {
+              const result = eventHook(event) as unknown;
+              if (result && typeof (result as Promise<unknown>).then === "function") {
+                (result as Promise<unknown>).catch((error) =>
+                  log.error("plugin event hook rejected", { spec, error: String(error) }),
+                );
+              }
+            } catch (error) {
+              log.error("plugin event hook threw", { spec, error: String(error) });
+            }
+          });
         }
       } catch (error) {
         log.error("failed to load plugin", { spec, error: String(error) });

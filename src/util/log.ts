@@ -8,6 +8,7 @@ const LEVELS: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 
 
 const logDir = process.env["COVEN_LOG_DIR"] ?? join(homedir(), ".local", "share", "coven", "log");
 let initialized = false;
+let disabled = false; // set once if the log dir can't be created (e.g. read-only HOME)
 let minLevel: LogLevel = (process.env["COVEN_LOG_LEVEL"] as LogLevel) ?? "info";
 
 export function setLogLevel(level: LogLevel): void {
@@ -16,9 +17,17 @@ export function setLogLevel(level: LogLevel): void {
 
 function write(level: LogLevel, scope: string, message: string, data?: Record<string, unknown>): void {
   if (LEVELS[level] < LEVELS[minLevel]) return;
+  if (disabled) return;
   if (!initialized) {
-    mkdirSync(logDir, { recursive: true });
-    initialized = true;
+    try {
+      mkdirSync(logDir, { recursive: true });
+      initialized = true;
+    } catch {
+      // Read-only HOME etc — disable logging for good; it must never throw
+      // (this function runs inside other modules' catch blocks).
+      disabled = true;
+      return;
+    }
   }
   const line = JSON.stringify({ time: new Date().toISOString(), level, scope, message, ...data });
   try {

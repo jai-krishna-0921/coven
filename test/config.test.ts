@@ -42,10 +42,26 @@ describe("loadConfig", () => {
     expect(loadConfig(dir).config.model).toBe("anthropic/commented");
   });
 
-  test("rejects invalid config with a useful error", () => {
+  test("degrades to defaults on an invalid config instead of crashing", () => {
     const dir = mkdtempSync(join(tmpdir(), "coven-test-"));
     writeFileSync(join(dir, "coven.json"), JSON.stringify({ max_steps: -5 }));
-    expect(() => loadConfig(dir)).toThrow(/max_steps/);
+    // Must NOT throw — one bad field can't brick every command.
+    const loaded = loadConfig(dir);
+    expect(loaded.config.max_steps).toBeUndefined();
+  });
+
+  test("degrades to defaults on malformed JSON instead of crashing", () => {
+    const dir = mkdtempSync(join(tmpdir(), "coven-test-"));
+    writeFileSync(join(dir, "coven.json"), '{ "model": "anthropic/x",, }'); // double + trailing comma
+    expect(() => loadConfig(dir)).not.toThrow();
+  });
+
+  test("tolerates a single trailing comma before a closing brace/bracket", () => {
+    const dir = mkdtempSync(join(tmpdir(), "coven-test-"));
+    writeFileSync(join(dir, "coven.json"), '{ "instructions": ["a", "b",], "model": "anthropic/z", }');
+    const loaded = loadConfig(dir);
+    expect(loaded.config.model).toBe("anthropic/z");
+    expect(loaded.config.instructions).toEqual(["a", "b"]);
   });
 
   test("comment stripping leaves URLs in strings intact", () => {

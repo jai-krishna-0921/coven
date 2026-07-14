@@ -15,8 +15,31 @@ import { ModelCatalog } from "./catalog/index.ts";
 import { createApp } from "./app.ts";
 import { runTui } from "./tui/index.ts";
 import { bold, cyan, dim, green, red, yellow } from "./util/ansi.ts";
+import { createLogger } from "./util/log.ts";
 
 const VERSION = "0.3.1";
+const log = createLogger("main");
+
+/**
+ * Last-resort crash net: a stray unhandled rejection (e.g. a plugin, a provider
+ * disconnect) should be logged, not kill a long-running session; an uncaught
+ * exception is logged and we restore the terminal (leave alt-screen, show
+ * cursor, reset) before exiting so we never strand the user in a broken TTY.
+ */
+function installCrashGuards(): void {
+  process.on("unhandledRejection", (reason) => {
+    log.error("unhandledRejection", { reason: reason instanceof Error ? (reason.stack ?? reason.message) : String(reason) });
+  });
+  process.on("uncaughtException", (error) => {
+    log.error("uncaughtException", { error: error instanceof Error ? (error.stack ?? error.message) : String(error) });
+    try {
+      if (process.stdout.isTTY) process.stdout.write("\x1b[?1049l\x1b[?25h\x1b[0m");
+    } catch {
+      /* best effort */
+    }
+    process.exit(1);
+  });
+}
 
 function ask(prompt: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -126,6 +149,7 @@ async function runPrintMode(prompt: string, agentName: string | undefined, autoY
 }
 
 async function main(): Promise<void> {
+  installCrashGuards();
   const { flags, positional } = parseFlags(process.argv.slice(2));
   const command = positional[0];
 

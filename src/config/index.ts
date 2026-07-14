@@ -9,8 +9,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
-import { ConfigError } from "../util/error.ts";
+import { createLogger } from "../util/log.ts";
 import { CovenConfig } from "./schema.ts";
+
+const log = createLogger("config");
 
 export interface LoadedConfig {
   config: CovenConfig;
@@ -68,23 +70,42 @@ function stripJsonComments(text: string): string {
       i++;
       continue;
     }
+    // Tolerate a trailing comma before a closing } or ] (common jsonc mistake).
+    if (ch === ",") {
+      let j = i + 1;
+      while (j < text.length && /\s/.test(text[j]!)) j++;
+      if (text[j] === "}" || text[j] === "]") continue;
+    }
     out += ch;
   }
   return out;
 }
 
-function readConfigFile(path: string): CovenConfig {
-  const raw = readFileSync(path, "utf8");
+/**
+ * Read + validate one config file. NEVER throws: a malformed or invalid file is
+ * logged and skipped (returns null), so one stray comma or typo can't brick
+ * every command — the tool degrades to defaults instead.
+ */
+function readConfigFile(path: string): CovenConfig | null {
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch (error) {
+    log.warn(`ignoring config (unreadable): ${path}: ${String(error)}`);
+    return null;
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripJsonComments(raw));
   } catch (error) {
-    throw new ConfigError(path, `not valid JSON: ${String(error)}`);
+    log.warn(`ignoring config (not valid JSON): ${path}: ${String(error)}`);
+    return null;
   }
   const result = CovenConfig.safeParse(parsed);
   if (!result.success) {
     const issue = result.error.issues[0];
-    throw new ConfigError(path, `${issue?.path.join(".") ?? "?"}: ${issue?.message ?? "invalid"}`);
+    log.warn(`ignoring config (invalid): ${path}: ${issue?.path.join(".") ?? "?"}: ${issue?.message ?? "invalid"}`);
+    return null;
   }
   return result.data;
 }
@@ -126,14 +147,20 @@ export function loadConfig(cwd: string = process.cwd()): LoadedConfig {
 
   const globalPath = join(homedir(), ".config", "coven", "coven.json");
   if (existsSync(globalPath)) {
-    merged = deepMerge(merged, readConfigFile(globalPath));
-    sources.push(dirname(globalPath));
+    const cfg = readConfigFile(globalPath);
+    if (cfg) {
+      merged = deepMerge(merged, cfg);
+      sources.push(dirname(globalPath));
+    }
   }
 
   const projectPath = findProjectConfig(cwd);
   if (projectPath) {
-    merged = deepMerge(merged, readConfigFile(projectPath));
-    sources.push(dirname(projectPath));
+    const cfg = readConfigFile(projectPath);
+    if (cfg) {
+      merged = deepMerge(merged, cfg);
+      sources.push(dirname(projectPath));
+    }
   }
 
   return {
