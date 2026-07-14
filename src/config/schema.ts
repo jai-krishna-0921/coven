@@ -36,6 +36,44 @@ export const ProviderConfig = z
   .strict();
 export type ProviderConfig = z.infer<typeof ProviderConfig>;
 
+/** One MCP server: a local stdio subprocess OR a remote HTTP/SSE endpoint. */
+export const McpServerConfig = z.union([
+  z
+    .object({
+      command: z.string(),
+      args: z.array(z.string()).optional(),
+      env: z.record(z.string(), z.string()).optional(),
+      enabled: z.boolean().optional(),
+      timeoutMs: z.number().int().positive().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      url: z.string().url(),
+      type: z.enum(["sse", "http"]).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
+      enabled: z.boolean().optional(),
+      timeoutMs: z.number().int().positive().optional(),
+    })
+    .strict(),
+]);
+export type McpServerConfig = z.infer<typeof McpServerConfig>;
+
+/** One LSP language server, keyed by language id (e.g. "typescript"). */
+export const LspServerConfig = z
+  .object({
+    command: z.string(),
+    args: z.array(z.string()).optional(),
+    /** File extensions this server handles, e.g. [".ts", ".tsx"]. */
+    extensions: z.array(z.string()),
+    env: z.record(z.string(), z.string()).optional(),
+    enabled: z.boolean().optional(),
+    /** Root marker files (e.g. ["tsconfig.json"]) — informational for now. */
+    rootMarkers: z.array(z.string()).optional(),
+  })
+  .strict();
+export type LspServerConfig = z.infer<typeof LspServerConfig>;
+
 export const CovenConfig = z
   .object({
     $schema: z.string().optional(),
@@ -55,6 +93,10 @@ export const CovenConfig = z
     plugins: z.array(z.string()).optional(),
     /** Hard cap on agentic iterations per user turn. */
     max_steps: z.number().int().positive().optional(),
+    /** MCP servers to connect, keyed by name. Tools appear as mcp__<name>__<tool>. */
+    mcp: z.record(z.string(), McpServerConfig).optional(),
+    /** LSP language servers to run, keyed by language id. */
+    lsp: z.record(z.string(), LspServerConfig).optional(),
     /** Text-to-speech settings (see src/tts). */
     tts: z
       .object({

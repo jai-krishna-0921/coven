@@ -12,6 +12,7 @@ import { PermissionEngine, rulesFromConfig } from "./permission/index.ts";
 import type { Ruleset } from "./permission/types.ts";
 import { PluginHost } from "./plugin/index.ts";
 import { ProviderRegistry } from "./provider/index.ts";
+import { McpHost } from "./mcp/index.ts";
 import { SessionEngine } from "./session/loop.ts";
 import { SessionStore } from "./session/store.ts";
 import { SkillRegistry } from "./skill/index.ts";
@@ -110,6 +111,7 @@ export interface App {
   auth?: AuthLike;
   tts?: TtsLike;
   commands?: CommandsLike;
+  mcp?: McpHost;
   dispose(): Promise<void>;
 }
 
@@ -130,6 +132,7 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
   ]);
   const tts = new Tts(loaded.config.tts ?? {});
   const store = new SessionStore(loaded.root);
+  const mcp = new McpHost(loaded.config.mcp, bus);
   const engine = new SessionEngine({
     config: loaded.config,
     root: loaded.root,
@@ -146,6 +149,11 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
     },
   });
 
+  // Connect MCP servers and register their tools before the first turn. Failures
+  // are isolated per server; an absent `mcp` config makes this a no-op.
+  await mcp.connectAll();
+  for (const tool of mcp.toolDefs()) engine.tools.register(tool);
+
   return {
     loaded,
     bus,
@@ -160,8 +168,10 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
     auth,
     tts,
     commands,
+    mcp,
     dispose: async () => {
       tts.stop();
+      await mcp.dispose();
       await plugins.dispose();
     },
   };

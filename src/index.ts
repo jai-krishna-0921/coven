@@ -188,6 +188,27 @@ Voice:  /voice in the TUI (say / espeak / piper / PowerShell / OpenAI TTS)`);
     for (const skill of skills) console.log(`${yellow("◆")} ${bold(skill.name)} — ${skill.description}`);
     return;
   }
+  if (command === "mcp") {
+    const app = await createApp();
+    try {
+      const servers = app.mcp?.servers() ?? [];
+      if (servers.length === 0) {
+        console.log(dim('no MCP servers configured — add an "mcp" block to coven.json'));
+        return;
+      }
+      for (const s of servers) {
+        const mark = s.state === "ready" ? green("●") : s.state === "error" ? red("✗") : yellow("…");
+        const detail = [s.transport, s.state, s.state === "ready" ? `${s.toolCount} tools` : "", s.error ?? ""]
+          .filter(Boolean)
+          .join(" · ");
+        console.log(`${mark} ${bold(s.name.padEnd(16))} ${dim(detail)}`);
+      }
+      for (const tool of app.mcp?.toolDefs() ?? []) console.log(`  ${cyan("→")} ${tool.id}`);
+    } finally {
+      await app.dispose();
+    }
+    return;
+  }
   if (command === "auth") {
     await authCommand(positional);
     return;

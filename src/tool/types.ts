@@ -38,6 +38,12 @@ export interface ToolDef<Args = unknown> {
   id: string;
   description: string;
   parameters: z.ZodType<Args>;
+  /**
+   * Pre-built JSON Schema for the model, used verbatim instead of converting
+   * `parameters`. Set by bridged tools (MCP) that already have a JSON Schema and
+   * only use a permissive `parameters` for passthrough validation.
+   */
+  jsonSchema?: Record<string, unknown>;
   execute(args: Args, ctx: ToolContext): Promise<ToolResult>;
 }
 

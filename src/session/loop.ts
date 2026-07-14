@@ -237,7 +237,7 @@ export class SessionEngine {
     const toolSchemas: ToolSchema[] = visibleTools.map((tool) => ({
       name: tool.id,
       description: tool.description,
-      parameters: toJsonSchema(tool.parameters),
+      parameters: tool.jsonSchema ?? toJsonSchema(tool.parameters),
     }));
 
     const params = await this.o.plugins.trigger(
