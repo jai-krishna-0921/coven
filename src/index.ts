@@ -253,6 +253,10 @@ Voice:  /voice in the TUI (say / espeak / piper / PowerShell / OpenAI TTS)`);
 }
 
 main().catch((error) => {
-  console.error(`${red("coven fatal:")} ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+  // ProviderError / PermissionError etc. are expected user-facing failures — show
+  // the message only. Genuine bugs (unknown error types) still show the stack.
+  const named = error instanceof Error && /^(Provider|Permission|Config|Catalog)Error$/.test(error.name);
+  if (named) console.error(`${red("coven fatal:")} ${error.message}`);
+  else console.error(`${red("coven fatal:")} ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
   process.exit(1);
 });

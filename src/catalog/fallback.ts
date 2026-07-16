@@ -70,4 +70,11 @@ export const BUILTIN_CATALOG: ReadonlyMap<string, CatalogProvider> = new Map<str
     ["gpt-oss:20b", "GPT-OSS 20B (local)", 131_072, 32_768, 0, 0, 0, 0, true],
     ["llama3.3", "Llama 3.3 (local)", 131_072, 32_768, 0, 0],
   ]),
+  provider("gemini", "Google Gemini", ["GEMINI_API_KEY"], [
+    ["gemini-2.5-pro", "Gemini 2.5 Pro", 2_000_000, 65_536, 1.25, 10, 0.31, 0, true],
+    ["gemini-2.5-flash", "Gemini 2.5 Flash", 1_048_576, 65_536, 0.3, 2.5, 0.075, 0, true],
+    ["gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite", 1_048_576, 65_536, 0.1, 0.4, 0.025],
+    ["gemini-2.0-flash", "Gemini 2.0 Flash", 1_048_576, 8_192, 0.1, 0.4, 0.025],
+    ["gemini-2.0-flash-lite", "Gemini 2.0 Flash Lite", 1_048_576, 8_192, 0.075, 0.3, 0],
+  ]),
 ]);

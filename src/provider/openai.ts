@@ -62,6 +62,44 @@ const CONNECT_TIMEOUT_MS = 60_000;
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Pull a short human message out of a provider error body — OpenAI-style
+ * `{"error":{"message":...}}`, Google-style array-wrapped equivalent, or the
+ * first non-empty line. Keeps fatal logs to a single readable line instead of
+ * dumping the whole JSON blob.
+ */
+function extractErrorSummary(text: string): string {
+  if (!text) return "(no body)";
+  try {
+    const j = JSON.parse(text) as unknown;
+    const walk = (v: unknown): string | undefined => {
+      if (!v) return undefined;
+      if (Array.isArray(v)) {
+        for (const x of v) {
+          const found = walk(x);
+          if (found) return found;
+        }
+        return undefined;
+      }
+      if (typeof v === "object") {
+        const o = v as Record<string, unknown>;
+        if (typeof o.message === "string" && o.message) return o.message;
+        for (const k of Object.keys(o)) {
+          const found = walk(o[k]);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    };
+    const msg = walk(j);
+    if (msg) return msg.split("\n")[0]!.slice(0, 240);
+  } catch {
+    /* fall through */
+  }
+  const line = text.split("\n").find((l) => l.trim().length > 0) ?? text;
+  return line.slice(0, 240);
+}
+
 export class OpenAICompatAdapter implements ProviderAdapter {
   constructor(
     readonly id: string,
@@ -133,12 +171,17 @@ export class OpenAICompatAdapter implements ProviderAdapter {
           break;
         }
         const text = await res.text().catch(() => "");
-        if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_RETRIES) {
+        // A quota-exhausted 429 (RESOURCE_EXHAUSTED, "quota exceeded", "billing")
+        // is permanent — retrying only wastes seconds and looks broken. Fail fast.
+        const permanentQuota =
+          res.status === 429 &&
+          /RESOURCE_EXHAUSTED|quota exceeded|billing|credits|depleted/i.test(text);
+        if (RETRYABLE_STATUS.has(res.status) && !permanentQuota && attempt < MAX_RETRIES) {
           const retryAfter = Number(res.headers.get("retry-after"));
           await delay(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : this.backoff(attempt));
           continue;
         }
-        throw new ProviderError(this.id, `HTTP ${res.status}: ${text.slice(0, 500)}`);
+        throw new ProviderError(this.id, `HTTP ${res.status}: ${extractErrorSummary(text)}`);
       }
 
       yield* this.consume(response!, input, ctrl, armIdle);

@@ -18,6 +18,7 @@ export const ENV_KEYS: Record<string, string> = {
   groq: "GROQ_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
   "ollama-cloud": "OLLAMA_API_KEY",
+  gemini: "GEMINI_API_KEY",
 };
 
 export interface AuthEntry {

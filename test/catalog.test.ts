@@ -253,7 +253,7 @@ describe("ModelCatalog.list / providers", () => {
   test("list() returns models across all providers", async () => {
     const catalog = await ModelCatalog.load({ cacheDir: freshCacheDir(), offline: true });
     const all = catalog.list();
-    expect(all.length).toBe(7 + 5 + 5 + 9 + 4);
+    expect(all.length).toBe(7 + 5 + 5 + 9 + 4 + 5); // + gemini
   });
 
   test("providers() exposes id, name and env", async () => {
@@ -261,6 +261,6 @@ describe("ModelCatalog.list / providers", () => {
     const providers = catalog.providers();
     const anthropic = providers.find((p) => p.id === "anthropic");
     expect(anthropic).toEqual({ id: "anthropic", name: "Anthropic", env: ["ANTHROPIC_API_KEY"] });
-    expect(providers.map((p) => p.id)).toEqual(["anthropic", "openai", "groq", "openrouter", "ollama"]);
+    expect(providers.map((p) => p.id)).toEqual(["anthropic", "openai", "groq", "openrouter", "ollama", "gemini"]);
   });
 });

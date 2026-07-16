@@ -25,6 +25,14 @@ describe("ProviderRegistry.resolve", () => {
     expect(reg.resolve("anthropic/claude-x").adapter).toBeInstanceOf(AnthropicAdapter);
   });
 
+  test("gemini resolves via Google's OpenAI-compat endpoint", () => {
+    const reg = new ProviderRegistry(emptyConfig, (id) => (id === "gemini" ? "AI-test" : undefined));
+    const { adapter, ref } = reg.resolve("gemini/gemini-2.5-flash");
+    expect(adapter).toBeInstanceOf(OpenAICompatAdapter);
+    expect(ref.providerID).toBe("gemini");
+    expect(ref.modelID).toBe("gemini-2.5-flash");
+  });
+
   test("a genuinely unknown provider with no baseUrl still throws", () => {
     const reg = new ProviderRegistry(emptyConfig, () => undefined);
     expect(() => reg.resolve("nosuchprovider/model")).toThrow();
