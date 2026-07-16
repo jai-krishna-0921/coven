@@ -41,6 +41,10 @@ function stateWith(session: SessionInfo): UiState {
     changedFiles: [],
     connectorReady: true,
     modelDisplay: "anthropic/claude-opus-4-8",
+    mcpServers: [],
+    lspServers: [],
+    lspDiagnostics: {},
+    todos: [],
   };
 }
 

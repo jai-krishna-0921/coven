@@ -28,8 +28,9 @@ function Sep() {
 
 export function Footer() {
   const { theme, icons } = useTheme();
-  const { session, context, modelDisplay } = useUi();
+  const { session, context, modelDisplay, lspDiagnostics } = useUi();
   const cost = session.cost ?? 0;
+  const diagTotal = Object.values(lspDiagnostics).reduce((a, b) => a + b, 0);
 
   return (
     <Box>
@@ -42,9 +43,15 @@ export function Footer() {
       <Sep />
       <Text color={theme.fgMuted}>${cost.toFixed(2)}</Text>
       <Sep />
-      <Text color={theme.toolOk}>
-        {icons.ok} no diagnostics
-      </Text>
+      {diagTotal > 0 ? (
+        <Text color={theme.warning}>
+          {icons.warn} {diagTotal} diag
+        </Text>
+      ) : (
+        <Text color={theme.toolOk}>
+          {icons.ok} no diagnostics
+        </Text>
+      )}
       <Sep />
       <Text color={theme.fgMuted}>{modelShort(modelDisplay)}</Text>
     </Box>

@@ -7,7 +7,7 @@ import type { UiStore } from "../../src/tui/store.ts";
 import type { UiState } from "../../src/tui/types.ts";
 import { EMPTY_USAGE } from "../../src/session/types.ts";
 
-function stateWith(context: UiState["context"], changedFiles: string[]): UiState {
+function stateWith(context: UiState["context"], changedFiles: string[], over: Partial<UiState> = {}): UiState {
   return {
     session: { id: "s1", title: "t", agent: "builder", created: 0, updated: 0, usage: { ...EMPTY_USAGE } },
     history: [],
@@ -24,6 +24,11 @@ function stateWith(context: UiState["context"], changedFiles: string[]): UiState
     changedFiles,
     connectorReady: true,
     modelDisplay: "anthropic/claude-opus-4-8",
+    mcpServers: [],
+    lspServers: [],
+    lspDiagnostics: {},
+    todos: [],
+    ...over,
   };
 }
 
@@ -59,5 +64,30 @@ describe("Sidebar", () => {
     expect(f).not.toContain("Modified Files");
     expect(f).toContain("Context");
     expect(f).toContain("LSP");
+  });
+
+  test("MCP panel lists connected servers with tool counts (no more 'later')", () => {
+    const f = frameOf(stateWith({ tokens: 0, usable: 100, pct: 0 }, [], {
+      mcpServers: [{ name: "calc", transport: "stdio", state: "ready", toolCount: 3 }],
+    }));
+    expect(f).toContain("calc");
+    expect(f).toContain("3");
+    expect(f).not.toContain("— later");
+  });
+
+  test("LSP panel lists servers and Todo panel lists items", () => {
+    const f = frameOf(stateWith({ tokens: 0, usable: 100, pct: 0 }, [], {
+      lspServers: [{ language: "typescript", command: "tsserver", state: "ready", openFiles: 1, diagnostics: 2 }],
+      lspDiagnostics: { "file:///x.ts": 2 },
+      todos: [
+        { content: "wire the sidebar", status: "completed" },
+        { content: "ship 0.4.1", status: "in_progress" },
+      ],
+    }));
+    expect(f).toContain("typescript");
+    expect(f).toContain("2 diag");
+    expect(f).toContain("wire the sidebar");
+    expect(f).toContain("ship 0.4.1");
+    expect(f).toContain("1/2"); // 1 of 2 done
   });
 });

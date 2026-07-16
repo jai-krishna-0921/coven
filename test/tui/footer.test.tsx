@@ -10,7 +10,7 @@ import { EMPTY_USAGE, type SessionInfo } from "../../src/session/types.ts";
 
 const theme = THEMES["coven-dark"];
 
-function stateWith(session: SessionInfo, context: UiState["context"]): UiState {
+function stateWith(session: SessionInfo, context: UiState["context"], over: Partial<UiState> = {}): UiState {
   return {
     session,
     history: [],
@@ -27,6 +27,11 @@ function stateWith(session: SessionInfo, context: UiState["context"]): UiState {
     changedFiles: [],
     connectorReady: true,
     modelDisplay: session.model ?? "default",
+    mcpServers: [],
+    lspServers: [],
+    lspDiagnostics: {},
+    todos: [],
+    ...over,
   };
 }
 
@@ -92,5 +97,17 @@ describe("Footer", () => {
       ),
     );
     expect(f).toContain("$0.00");
+  });
+
+  test("diagnostics count replaces the 'no diagnostics' label when > 0", () => {
+    const f = frameOf(
+      stateWith(
+        { id: "s1", title: "T", agent: "builder", created: 0, updated: 0, usage: { ...EMPTY_USAGE } },
+        { tokens: 0, usable: 100, pct: 0 },
+        { lspDiagnostics: { "file:///a.ts": 3, "file:///b.ts": 1 } },
+      ),
+    );
+    expect(f).toContain("4 diag");
+    expect(f).not.toContain("no diagnostics");
   });
 });

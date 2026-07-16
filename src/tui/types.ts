@@ -2,6 +2,8 @@ import type { SessionInfo, Message } from "../session/types.ts";
 import type { App } from "../app.ts";
 import type { PermissionRequest } from "../permission/types.ts";
 import type { UiPrefs } from "./prefs.ts";
+import type { McpServerStatus } from "../mcp/types.ts";
+import type { LspServerStatus } from "../lsp/types.ts";
 // NOTE: do NOT import ./store.ts here — it is produced in Task 14 and a forward module
 // import would fail every intervening `tsc --noEmit` gate. CommandContext.store is typed
 // structurally via UiStoreLike below; the concrete UiStore (Task 14) `implements UiStoreLike`.
@@ -55,6 +57,10 @@ export interface UiState {
   changedFiles: string[];
   connectorReady: boolean;
   modelDisplay: string;          // the "provider/model" actually in effect (override → session → config → default)
+  mcpServers: McpServerStatus[]; // sidebar MCP panel — live from bus mcp.status events
+  lspServers: LspServerStatus[]; // sidebar LSP panel — live from bus lsp.status events
+  lspDiagnostics: Record<string, number>; // uri → count, drives Footer diagnostics count
+  todos: { content: string; status: "pending" | "in_progress" | "completed" }[]; // active session's todo list
 }
 
 export interface CommandHost {           // App-local actions the App injects (Task 43)

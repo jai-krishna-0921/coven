@@ -16,6 +16,7 @@ import type { BusEvent } from "../bus/index.ts";
 import type { PermissionRequest } from "../permission/types.ts";
 import { EMPTY_USAGE, type Message, type Part, type SessionInfo } from "../session/types.ts";
 import { DEFAULT_MODEL } from "../config/schema.ts";
+import { todoState } from "../tool/todo.ts";
 import type { ModalKind, ModalProps, ToastKind, UiState, UiStoreLike } from "./types.ts";
 
 const FLUSH_MS = 25;
@@ -64,6 +65,12 @@ export class UiStore implements UiStoreLike {
       changedFiles: [],
       connectorReady: this.connectorReady(session),
       modelDisplay: this.effectiveModel(session),
+      // Seed from what's already connected at startup so the sidebar is live
+      // on first render (mcp.status/lsp.status events fire before subscribe).
+      mcpServers: app.mcp?.servers() ?? [],
+      lspServers: app.lsp?.status() ?? [],
+      lspDiagnostics: {},
+      todos: todoState.get(sessionID) ?? [],
     };
     this.unsubscribe = app.bus.subscribe((event) => this.handle(event));
   }
@@ -282,7 +289,11 @@ export class UiStore implements UiStoreLike {
         const parts = [...this.state.live.parts];
         const existing = parts[idx];
         if (existing && existing.type === "tool") parts[idx] = { ...existing, status: event.status };
-        this.set({ live: { ...this.state.live, parts } });
+        // The todo tool writes to a module-level Map; refresh the sidebar Todo
+        // panel whenever it finishes.
+        const patch: Partial<UiState> = { live: { ...this.state.live, parts } };
+        if (event.tool === "todo") patch.todos = [...(todoState.get(this.sessionID) ?? [])];
+        this.set(patch);
         return;
       }
       case "session.compacting": {
@@ -305,6 +316,26 @@ export class UiStore implements UiStoreLike {
       }
       case "permission.replied": {
         this.dequeuePermission(event.requestID);
+        return;
+      }
+      case "mcp.status": {
+        // Replace or append the server row by name — the host emits every
+        // transition (connecting → ready / error), and the sidebar should
+        // always show the latest per server.
+        const others = this.state.mcpServers.filter((s) => s.name !== event.status.name);
+        this.set({ mcpServers: [...others, event.status] });
+        return;
+      }
+      case "lsp.status": {
+        const others = this.state.lspServers.filter((s) => s.language !== event.status.language);
+        this.set({ lspServers: [...others, event.status] });
+        return;
+      }
+      case "lsp.diagnostics": {
+        const next = { ...this.state.lspDiagnostics, [event.uri]: event.count };
+        // Drop zero-diagnostic entries so the total stays accurate.
+        if (event.count === 0) delete next[event.uri];
+        this.set({ lspDiagnostics: next });
         return;
       }
       default:

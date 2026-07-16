@@ -24,6 +24,10 @@ function stateWith(session: SessionInfo): UiState {
     changedFiles: [],
     connectorReady: true,
     modelDisplay: session.model ?? "default",
+    mcpServers: [],
+    lspServers: [],
+    lspDiagnostics: {},
+    todos: [],
   };
 }
 
