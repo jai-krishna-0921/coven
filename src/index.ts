@@ -17,7 +17,7 @@ import { runTui } from "./tui/index.ts";
 import { bold, cyan, dim, green, red, yellow } from "./util/ansi.ts";
 import { createLogger } from "./util/log.ts";
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 const log = createLogger("main");
 
 /**

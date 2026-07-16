@@ -3,6 +3,34 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.1] — 2026-07-16
+
+### Added
+- **Gemini provider.** New `gemini/*` model refs (e.g. `gemini/gemini-2.5-flash`)
+  reach Google's OpenAI-compat surface using `GEMINI_API_KEY`. The five common
+  models — `2.5 pro`, `2.5 flash`, `2.5 flash-lite`, `2.0 flash`, `2.0 flash-lite` —
+  are in the fallback catalog so `coven models gemini` and the model picker work
+  out of the box.
+- **Sidebar panels are live** — the `Todo`, `LSP`, and `MCP` panels no longer
+  say "— later". Todo shows N-done/N-total plus each task with a
+  `[x]`/`[~]`/`[ ]` mark, colour-coded by status. LSP lists each server with a
+  state dot and diagnostics count. MCP lists each server with a state dot and
+  tool count.
+- **Footer diagnostics** — the hardcoded "no diagnostics" now flips to
+  `N diag` (in the warning colour) when any file has real LSP diagnostics.
+
+### Fixed
+- **Permanent 429s fail fast.** A `RESOURCE_EXHAUSTED` / "quota exceeded" /
+  "billing" 429 no longer triggers exponential-backoff retries — it fails
+  immediately (~1s instead of ~8s of wasted wait) with a clean one-line
+  message. Real rate-limit 429s (with `Retry-After` or no permanent signal)
+  still retry as before.
+- **CLI error UX** — known named errors (`ProviderError`, `PermissionError`,
+  `ConfigError`, `CatalogError`) print just the message, not a stack; genuine
+  bugs still show the full stack. Provider error bodies are summarised to their
+  first `message` field (walks OpenAI-style `{"error":{"message":…}}` and
+  Google-style array-wrapped shapes) instead of dumping 500 chars of JSON.
+
 ## [0.4.0] — 2026-07-14
 
 ### Added

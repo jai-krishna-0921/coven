@@ -102,7 +102,7 @@ export class LspClient {
         },
         workspace: { workspaceFolders: true, configuration: true },
       },
-      clientInfo: { name: "coven", version: "0.4.0" },
+      clientInfo: { name: "coven", version: "0.4.1" },
     });
     this.notify("initialized", {});
     log.debug("lsp: initialized", { rootUri: this.opts.rootUri });
