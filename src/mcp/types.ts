@@ -91,10 +91,24 @@ export interface McpPromptResult {
   messages: McpPromptMessage[];
 }
 
+export interface McpOAuthConfig {
+  authorizationUrl: string;
+  tokenUrl: string;
+  clientId: string;
+  scopes?: string[];
+}
+
 /** The `mcp` config block per server (stdio subprocess OR remote endpoint). */
 export type McpServerConfig =
   | { command: string; args?: string[]; env?: Record<string, string>; enabled?: boolean; timeoutMs?: number }
-  | { url: string; type?: "sse" | "http"; headers?: Record<string, string>; enabled?: boolean; timeoutMs?: number };
+  | {
+      url: string;
+      type?: "sse" | "http";
+      headers?: Record<string, string>;
+      enabled?: boolean;
+      timeoutMs?: number;
+      oauth?: McpOAuthConfig;
+    };
 
 export function isStdioConfig(
   c: McpServerConfig,

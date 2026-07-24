@@ -54,6 +54,20 @@ export const McpServerConfig = z.union([
       headers: z.record(z.string(), z.string()).optional(),
       enabled: z.boolean().optional(),
       timeoutMs: z.number().int().positive().optional(),
+      /**
+       * Enables `coven mcp auth <name>`. When present and a stored OAuth
+       * credential exists under `mcp:<name>`, the access token is added as an
+       * `Authorization: Bearer …` header on every request to `url`.
+       */
+      oauth: z
+        .object({
+          authorizationUrl: z.string().url(),
+          tokenUrl: z.string().url(),
+          clientId: z.string(),
+          scopes: z.array(z.string()).optional(),
+        })
+        .strict()
+        .optional(),
     })
     .strict(),
 ]);

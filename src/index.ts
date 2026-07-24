@@ -22,6 +22,7 @@ import * as readline from "node:readline";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { AuthStore, ENV_KEYS } from "./auth/index.ts";
+import { performOAuthFlow, type OAuthClient } from "./auth/oauth.ts";
 import { ModelCatalog } from "./catalog/index.ts";
 import { createApp } from "./app.ts";
 import { runTui } from "./tui/index.ts";
@@ -58,7 +59,23 @@ function ask(prompt: string): Promise<string> {
   );
 }
 
-async function authCommand(positional: string[]): Promise<void> {
+/**
+ * OAuth client registry — providers we know how to authenticate via OAuth.
+ * clientId is intentionally hardcoded (public client): providers gate the flow
+ * with PKCE + redirect URI on their side. Dynamic client registration is out of
+ * scope for this wave.
+ */
+const OAUTH_CLIENTS: Record<string, OAuthClient> = {
+  anthropic: {
+    authorizationUrl: "https://claude.ai/oauth/authorize",
+    tokenUrl: "https://console.anthropic.com/v1/oauth/token",
+    clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+    scopes: ["org:create_api_key", "user:profile", "user:inference"],
+    extraAuthParams: { code: "true" },
+  },
+};
+
+async function authCommand(positional: string[], flags?: Map<string, string | true>): Promise<void> {
   const auth = new AuthStore();
   const [, sub = "list", providerArg] = positional;
   if (sub === "list" || sub === "ls") {
@@ -76,6 +93,19 @@ async function authCommand(positional: string[]): Promise<void> {
   if (sub === "login") {
     const provider = providerArg ?? (await ask(`provider (${Object.keys(ENV_KEYS).join("/")} or custom): `));
     if (!provider) return;
+    const wantsOAuth = flags?.get("oauth") === true;
+    if (wantsOAuth) {
+      const client = OAUTH_CLIENTS[provider.toLowerCase()];
+      if (!client) {
+        console.error(`${red("✗")} no OAuth client configured for "${provider}". Known: ${Object.keys(OAUTH_CLIENTS).join(", ")}`);
+        process.exit(1);
+      }
+      console.log(`${cyan("→")} opening browser to sign in to ${bold(provider)}…`);
+      const tokens = await performOAuthFlow(client, { printOnly: flags?.get("print") === true });
+      auth.setOAuth(provider, { access: tokens.access, refresh: tokens.refresh, expiresAt: tokens.expiresAt, clientId: client.clientId, scope: tokens.scope });
+      console.log(`${green("✓")} signed in to ${bold(provider)} via OAuth ${dim(tokens.expiresAt ? `(access expires in ${Math.round((tokens.expiresAt - Date.now()) / 60000)}m)` : "")}`);
+      return;
+    }
     const key = await ask(`API key for ${provider}: `);
     if (!key) return;
     auth.set(provider, key);
@@ -497,6 +527,30 @@ Voice:  /voice in the TUI (say / espeak / piper / PowerShell / OpenAI TTS)`);
     return;
   }
   if (command === "mcp") {
+    const sub = positional[1];
+    if (sub === "auth") {
+      const name = positional[2];
+      if (!name) {
+        console.error(`${red("✗")} usage: coven mcp auth <server-name>`);
+        process.exit(1);
+      }
+      const app = await createApp();
+      try {
+        const cfg = app.loaded.config.mcp?.[name];
+        if (!cfg || !("url" in cfg) || !cfg.oauth) {
+          console.error(`${red("✗")} no OAuth-enabled MCP server "${name}". Add an "oauth" block under mcp.${name} in coven.json.`);
+          process.exit(1);
+        }
+        const client = { authorizationUrl: cfg.oauth.authorizationUrl, tokenUrl: cfg.oauth.tokenUrl, clientId: cfg.oauth.clientId, scopes: cfg.oauth.scopes } satisfies OAuthClient;
+        console.log(`${cyan("→")} opening browser to sign in to MCP server ${bold(name)}…`);
+        const tokens = await performOAuthFlow(client, { printOnly: flags.get("print") === true });
+        app.auth?.setOAuth(`mcp:${name}`, { access: tokens.access, refresh: tokens.refresh, expiresAt: tokens.expiresAt, clientId: client.clientId, scope: tokens.scope });
+        console.log(`${green("✓")} signed in to MCP server ${bold(name)} ${dim(tokens.expiresAt ? `(expires in ${Math.round((tokens.expiresAt - Date.now()) / 60000)}m)` : "")}`);
+        return;
+      } finally {
+        await app.dispose();
+      }
+    }
     const app = await createApp();
     try {
       const servers = app.mcp?.servers() ?? [];
@@ -505,7 +559,14 @@ Voice:  /voice in the TUI (say / espeak / piper / PowerShell / OpenAI TTS)`);
         return;
       }
       for (const s of servers) {
-        const mark = s.state === "ready" ? green("●") : s.state === "error" ? red("✗") : yellow("…");
+        const mark =
+          s.state === "ready"
+            ? green("●")
+            : s.state === "error"
+              ? red("✗")
+              : s.state === "needs_auth"
+                ? yellow("🔒")
+                : yellow("…");
         const detail = [s.transport, s.state, s.state === "ready" ? `${s.toolCount} tools` : "", s.error ?? ""]
           .filter(Boolean)
           .join(" · ");
@@ -535,7 +596,7 @@ Voice:  /voice in the TUI (say / espeak / piper / PowerShell / OpenAI TTS)`);
     return;
   }
   if (command === "auth") {
-    await authCommand(positional);
+    await authCommand(positional, flags);
     return;
   }
   if (command === "models") {

@@ -64,8 +64,10 @@ export interface CatalogLike {
 export interface AuthLike {
   entries(): { provider: string; source: "env" | "auth.json"; masked: string }[];
   set(provider: string, key: string): void;
+  setOAuth(provider: string, credential: { access: string; refresh?: string; expiresAt?: number; clientId: string; scope?: string }): void;
   remove(provider: string): boolean;
-  resolveKey(provider: string): { key: string; source: "env" | "auth.json" } | undefined;
+  resolveKey(provider: string): { key: string; source: "env" | "auth.json"; kind?: "api" | "oauth" } | undefined;
+  getOAuth(provider: string): { access: string; refresh?: string; expiresAt?: number; clientId: string; scope?: string } | undefined;
 }
 
 export interface TtsLike {
@@ -149,7 +151,7 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
       mcpToolIds.add(tool.id);
     }
   };
-  const mcp = new McpHost(loaded.config.mcp, bus, () => rebuildMcpTools());
+  const mcp = new McpHost(loaded.config.mcp, bus, () => rebuildMcpTools(), auth);
   const lsp = new LspHost(loaded.config.lsp, loaded.root, bus);
   const snapshot = loaded.config.snapshot === false ? undefined : new SnapshotStore(loaded.root);
   const engine = new SessionEngine({

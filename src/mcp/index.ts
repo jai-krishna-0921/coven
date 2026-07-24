@@ -9,6 +9,7 @@ import { z } from "zod";
 import { truncateOutput, type ToolDef } from "../tool/types.ts";
 import { createLogger } from "../util/log.ts";
 import type { Bus } from "../bus/index.ts";
+import type { AuthStore } from "../auth/index.ts";
 import { McpClient } from "./client.ts";
 import { HttpTransport, StdioTransport } from "./transport.ts";
 import {
@@ -93,6 +94,8 @@ export class McpHost {
     private readonly bus?: Bus,
     /** Called when a server's tool list changes after connect (tools/list_changed). */
     private readonly onToolsChanged?: () => void,
+    /** Auth store — used to add `Authorization: Bearer …` for servers with an oauth config block. */
+    private readonly auth?: AuthStore,
   ) {}
 
   /** Connect every server in parallel; individual failures are isolated. */
@@ -104,15 +107,25 @@ export class McpHost {
   private async connectOne(name: string, cfg: McpServerConfig): Promise<void> {
     if (cfg.enabled === false) return;
     const stdio = isStdioConfig(cfg);
+    // For OAuth-configured servers with stored tokens, merge Authorization
+    // into the outgoing headers. Missing/expired tokens surface as a `needs_auth`
+    // status so the user knows to run `coven mcp auth <name>`.
+    const authHeader = !stdio && cfg.oauth ? this.oauthBearer(name) : undefined;
     const transport = stdio
       ? new StdioTransport(cfg.command, cfg.args, cfg.env)
-      : new HttpTransport(cfg.url, cfg.headers);
+      : new HttpTransport(cfg.url, { ...(cfg.headers ?? {}), ...(authHeader ? { Authorization: authHeader } : {}) });
     const status: McpServerStatus = {
       name,
       transport: stdio ? "stdio" : (cfg.type ?? "http"),
-      state: "connecting",
+      state: !stdio && cfg.oauth && !authHeader ? "needs_auth" : "connecting",
       toolCount: 0,
     };
+    if (status.state === "needs_auth") {
+      status.error = `OAuth required — run: coven mcp auth ${name}`;
+      this.entries.push({ name, client: undefined as unknown as McpClient, status, tools: [], resources: [], prompts: [] });
+      this.emit(status);
+      return;
+    }
     const entry: ServerEntry = { name, client: undefined as unknown as McpClient, status, tools: [], resources: [], prompts: [] };
     const client = new McpClient(transport, cfg.timeoutMs, {
       onToolsChanged: () => {
@@ -236,7 +249,19 @@ export class McpHost {
     return blocks.join("\n\n");
   }
 
+  private oauthBearer(serverName: string): string | undefined {
+    const cred = this.auth?.getOAuth(`mcp:${serverName}`);
+    if (!cred) return undefined;
+    // Refuse to send an already-expired access token — surface as needs_auth instead.
+    if (cred.expiresAt && cred.expiresAt < Date.now()) return undefined;
+    return `Bearer ${cred.access}`;
+  }
+
   async dispose(): Promise<void> {
-    await Promise.all(this.entries.map((e) => e.client.close().catch(() => {})));
+    await Promise.all(
+      this.entries
+        .filter((e) => e.client !== undefined)
+        .map((e) => e.client.close().catch(() => {})),
+    );
   }
 }

@@ -32,6 +32,17 @@ interface ApiCredential {
   key: string;
 }
 
+interface OAuthCredential {
+  type: "oauth";
+  access: string;
+  refresh?: string;
+  expiresAt?: number;
+  clientId: string;
+  scope?: string;
+}
+
+type Credential = ApiCredential | OAuthCredential;
+
 function normalizeProvider(provider: string): string {
   return provider.toLowerCase().replace(/\/+$/, "");
 }
@@ -44,6 +55,28 @@ function asApiCredential(value: unknown): ApiCredential | undefined {
   const key = record["key"];
   if (typeof key !== "string" || key.length === 0) return undefined;
   return { type: "api", key };
+}
+
+function asOAuthCredential(value: unknown): OAuthCredential | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  if (record["type"] !== "oauth") return undefined;
+  const access = record["access"];
+  const clientId = record["clientId"];
+  if (typeof access !== "string" || access.length === 0) return undefined;
+  if (typeof clientId !== "string") return undefined;
+  return {
+    type: "oauth",
+    access,
+    clientId,
+    refresh: typeof record["refresh"] === "string" ? (record["refresh"] as string) : undefined,
+    expiresAt: typeof record["expiresAt"] === "number" ? (record["expiresAt"] as number) : undefined,
+    scope: typeof record["scope"] === "string" ? (record["scope"] as string) : undefined,
+  };
+}
+
+function asCredential(value: unknown): Credential | undefined {
+  return asApiCredential(value) ?? asOAuthCredential(value);
 }
 
 /** Mask a key for display; never reveals the middle, fully masks short keys. */
@@ -99,20 +132,29 @@ export class AuthStore {
   /** Stored key from auth.json only (env vars are not consulted). */
   get(provider: string): string | undefined {
     const value = this.readRaw()[normalizeProvider(provider)];
-    return asApiCredential(value)?.key;
+    const cred = asCredential(value);
+    if (!cred) return undefined;
+    return cred.type === "api" ? cred.key : cred.access;
   }
 
-  /** Resolve a usable key: the provider's env var wins, then auth.json. */
-  resolveKey(provider: string): { key: string; source: "env" | "auth.json" } | undefined {
+  /** Get the raw OAuth credential (access + refresh + expiry) for a provider. */
+  getOAuth(provider: string): OAuthCredential | undefined {
+    return asOAuthCredential(this.readRaw()[normalizeProvider(provider)]);
+  }
+
+  /** Resolve a usable key: the provider's env var wins, then auth.json (api or oauth access). */
+  resolveKey(provider: string): { key: string; source: "env" | "auth.json"; kind?: "api" | "oauth" } | undefined {
     const id = normalizeProvider(provider);
     const envName = ENV_KEYS[id];
     if (envName !== undefined) {
       const value = process.env[envName];
-      if (value !== undefined && value.length > 0) return { key: value, source: "env" };
+      if (value !== undefined && value.length > 0) return { key: value, source: "env", kind: "api" };
     }
-    const stored = this.get(id);
-    if (stored !== undefined) return { key: stored, source: "auth.json" };
-    return undefined;
+    const value = this.readRaw()[id];
+    const cred = asCredential(value);
+    if (!cred) return undefined;
+    if (cred.type === "api") return { key: cred.key, source: "auth.json", kind: "api" };
+    return { key: cred.access, source: "auth.json", kind: "oauth" };
   }
 
   set(provider: string, key: string): void {
@@ -121,6 +163,15 @@ export class AuthStore {
     data[id] = { type: "api", key } satisfies ApiCredential;
     this.writeRaw(data);
     log.info("stored api key", { provider: id });
+  }
+
+  /** Save OAuth tokens obtained from the flow — access, refresh, expiry, clientId. */
+  setOAuth(provider: string, credential: Omit<OAuthCredential, "type">): void {
+    const id = normalizeProvider(provider);
+    const data = this.readRaw();
+    data[id] = { type: "oauth", ...credential } satisfies OAuthCredential;
+    this.writeRaw(data);
+    log.info("stored oauth credential", { provider: id, hasRefresh: !!credential.refresh });
   }
 
   remove(provider: string): boolean {
@@ -137,10 +188,10 @@ export class AuthStore {
   entries(): AuthEntry[] {
     const result: AuthEntry[] = [];
     for (const [provider, value] of Object.entries(this.readRaw())) {
-      const credential = asApiCredential(value);
-      if (credential !== undefined) {
-        result.push({ provider, source: "auth.json", masked: maskKey(credential.key) });
-      }
+      const credential = asCredential(value);
+      if (!credential) continue;
+      const shown = credential.type === "api" ? credential.key : credential.access;
+      result.push({ provider, source: "auth.json", masked: maskKey(shown) });
     }
     for (const [provider, envName] of Object.entries(ENV_KEYS)) {
       const value = process.env[envName];
