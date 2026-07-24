@@ -102,6 +102,7 @@ export interface EngineOptions {
   skills: SkillRegistry;
   plugins: PluginHost;
   permissions: PermissionEngine;
+  questions?: import("../question/index.ts").QuestionEngine;
   /** Model metadata lookup (context window, output limit, pricing). Optional — sane defaults apply. */
   modelMeta?: (providerID: string, modelID: string) => ModelMeta;
   /** Snapshot store powering `/undo` — optional, disabled by config knob. */
@@ -740,6 +741,7 @@ export class SessionEngine {
         return skill ? { content: skill.content, dir: skill.dir } : undefined;
       },
       captureFile: this.o.snapshot ? (path) => this.o.snapshot!.captureFile(sessionID, path) : undefined,
+      askQuestion: this.o.questions ? (input) => this.o.questions!.ask(sessionID, input, abort) : undefined,
     };
 
     try {

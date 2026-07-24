@@ -15,7 +15,7 @@ function randomSuffix(length: number): string {
   return out;
 }
 
-export function createId(prefix: "ses" | "msg" | "prt" | "call" | "perm" | "plan"): string {
+export function createId(prefix: "ses" | "msg" | "prt" | "call" | "perm" | "plan" | "q"): string {
   const now = Date.now();
   if (now === lastTime) {
     counter++;

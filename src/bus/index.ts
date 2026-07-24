@@ -25,7 +25,9 @@ export type BusEvent =
   | { type: "session.compacted"; sessionID: string; tokensBefore: number }
   | { type: "mcp.status"; status: McpServerStatus }
   | { type: "lsp.status"; status: LspServerStatus }
-  | { type: "lsp.diagnostics"; uri: string; count: number };
+  | { type: "lsp.diagnostics"; uri: string; count: number }
+  | { type: "question.asked"; request: import("../question/types.ts").QuestionRequest }
+  | { type: "question.replied"; requestID: string; reply: import("../question/types.ts").QuestionReply };
 
 export type BusEventType = BusEvent["type"];
 

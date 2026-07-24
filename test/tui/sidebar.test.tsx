@@ -16,6 +16,7 @@ function stateWith(context: UiState["context"], changedFiles: string[], over: Pa
     compacting: false,
     context,
     permission: null,
+    question: null,
     modal: null,
     reonboarding: false,
     sidebarOverlay: false,

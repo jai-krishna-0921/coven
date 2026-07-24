@@ -62,6 +62,7 @@ function makeCtx(prefs: UiPrefs = { ...DEFAULT_PREFS }) {
       setReonboarding: () => {},
       scrollBy: () => {},
     scrollToMessage: () => {},
+    replyQuestion: () => {},
     },
     session: makeSession("sess1"),
     abort: new AbortController().signal,

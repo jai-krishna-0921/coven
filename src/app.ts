@@ -9,6 +9,7 @@ import { ModelCatalog } from "./catalog/index.ts";
 import { CommandRegistry } from "./command/index.ts";
 import { loadConfig, type LoadedConfig } from "./config/index.ts";
 import { PermissionEngine, rulesFromConfig } from "./permission/index.ts";
+import { QuestionEngine } from "./question/index.ts";
 import type { Ruleset } from "./permission/types.ts";
 import { PluginHost } from "./plugin/index.ts";
 import { ProviderRegistry } from "./provider/index.ts";
@@ -107,6 +108,7 @@ export interface App {
   store: SessionStore;
   engine: SessionEngine;
   permissions: PermissionEngine;
+  questions: QuestionEngine;
   agents: AgentRegistry;
   skills: SkillRegistry;
   plugins: PluginHost;
@@ -127,6 +129,7 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
   const bus = new Bus();
   const auth = new AuthStore();
   const permissions = new PermissionEngine(bus, [...BASELINE_RULES, ...rulesFromConfig(loaded.config.permission)]);
+  const questions = new QuestionEngine(bus);
   // BYOK: resolve through the auth layer (env vars AND stored auth.json), not just
   // stored keys, so e.g. OLLAMA_API_KEY / GROQ_API_KEY in the environment work.
   const providers = new ProviderRegistry(loaded.config, (providerID) => auth.resolveKey(providerID)?.key);
@@ -164,6 +167,7 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
     skills,
     plugins,
     permissions,
+    questions,
     snapshot,
     mcpInstructions: () => mcp.instructions(),
     modelMeta: (providerID, modelID) => {
@@ -220,6 +224,7 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
     store,
     engine,
     permissions,
+    questions,
     agents,
     skills,
     plugins,

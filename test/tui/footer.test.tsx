@@ -19,6 +19,7 @@ function stateWith(session: SessionInfo, context: UiState["context"], over: Part
     compacting: false,
     context,
     permission: null,
+    question: null,
     modal: null,
     reonboarding: false,
     sidebarOverlay: false,

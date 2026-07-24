@@ -95,6 +95,7 @@ function makeCtx(defs: CommandDef[] = [initDef]) {
       setReonboarding: () => {},
       scrollBy: () => {},
     scrollToMessage: () => {},
+    replyQuestion: () => {},
     },
     session: makeSession("parent1"),
     abort: new AbortController().signal,

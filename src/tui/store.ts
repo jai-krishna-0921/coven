@@ -43,6 +43,8 @@ export class UiStore implements UiStoreLike {
 
   /** Serialized permission asks; the head is surfaced in `state.permission`. */
   private permQueue: PermissionRequest[] = [];
+  /** Serialized question asks; the head is surfaced in `state.question`. */
+  private questionQueue: import("../question/types.ts").QuestionRequest[] = [];
 
   constructor(
     private readonly app: App,
@@ -57,6 +59,7 @@ export class UiStore implements UiStoreLike {
       compacting: false,
       context: app.engine.contextInfo(sessionID),
       permission: null,
+      question: null,
       modal: null,
       reonboarding: false,
       sidebarOverlay: false,
@@ -134,12 +137,18 @@ export class UiStore implements UiStoreLike {
     this.dequeuePermission(head.id);
   }
 
+  replyQuestion(requestID: string, reply: import("../question/types.ts").QuestionReply): void {
+    this.app.questions.reply(requestID, reply);
+    this.dequeueQuestion(requestID);
+  }
+
   setSessionID(id: string): void {
     this.sessionID = id;
     if (this.flushTimer) clearTimeout(this.flushTimer);
     this.flushTimer = null;
     this.deltaBuffer.clear();
     this.permQueue = [];
+    this.questionQueue = [];
     const session = this.app.store.get(id) ?? UiStore.fallbackSession(id);
     this.set({
       session,
@@ -148,6 +157,7 @@ export class UiStore implements UiStoreLike {
       status: "idle",
       context: this.app.engine.contextInfo(id),
       permission: null,
+      question: null,
       changedFiles: [],
       scrollOffset: 0,
       connectorReady: this.connectorReady(session),
@@ -332,6 +342,16 @@ export class UiStore implements UiStoreLike {
         this.dequeuePermission(event.requestID);
         return;
       }
+      case "question.asked": {
+        if (event.request.sessionID !== this.sessionID) return;
+        this.questionQueue.push(event.request);
+        this.surfaceQuestion();
+        return;
+      }
+      case "question.replied": {
+        this.dequeueQuestion(event.requestID);
+        return;
+      }
       case "mcp.status": {
         // Replace or append the server row by name — the host emits every
         // transition (connecting → ready / error), and the sidebar should
@@ -384,6 +404,18 @@ export class UiStore implements UiStoreLike {
   private dequeuePermission(requestID: string): void {
     this.permQueue = this.permQueue.filter((r) => r.id !== requestID);
     this.surfacePermission();
+  }
+
+  private surfaceQuestion(): void {
+    const live = new Set(this.app.questions.pendingRequests().map((r) => r.id));
+    this.questionQueue = this.questionQueue.filter((r) => live.has(r.id));
+    const head = this.questionQueue[0] ?? null;
+    if (head !== this.state.question) this.set({ question: head });
+  }
+
+  private dequeueQuestion(requestID: string): void {
+    this.questionQueue = this.questionQueue.filter((r) => r.id !== requestID);
+    this.surfaceQuestion();
   }
 
   private connectorReady(session: SessionInfo): boolean {

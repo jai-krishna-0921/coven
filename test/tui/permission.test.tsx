@@ -24,6 +24,7 @@ function stateWith(permission: PermissionRequest | null): UiState {
     compacting: false,
     context: { tokens: 0, usable: 100, pct: 0 },
     permission,
+    question: null,
     modal: null,
     reonboarding: false,
     sidebarOverlay: false,

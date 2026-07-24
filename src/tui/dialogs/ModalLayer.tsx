@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { Timeline } from "./Timeline.tsx";
 import { DialogExportOptions } from "./DialogExportOptions.tsx";
 import { DeleteRecovery } from "./DeleteRecovery.tsx";
+import { Question } from "./Question.tsx";
 import { useTheme, useUi } from "../context.tsx";
 import type { CommandContext, ModalKind, ModalProps } from "../types.ts";
 import { Palette } from "./Palette.tsx";
@@ -90,8 +91,13 @@ function renderDialog(kind: ModalKind | undefined, props: ModalProps | undefined
 export function ModalLayer({ ctx }: { ctx: CommandContext }) {
   const { theme } = useTheme();
   const state = useUi();
-  const kind: ModalKind | undefined = state.permission ? "permission" : state.modal?.kind;
-  const dialog = renderDialog(kind, state.modal?.props, ctx);
+  // Precedence: a permission ask beats an in-flight question beats a user-opened modal.
+  // The agent's `question` tool blocks the turn, so its dialog must always win over
+  // whatever modal the user might have opened before firing the tool.
+  let dialog: ReactNode | null;
+  if (state.permission) dialog = renderDialog("permission", undefined, ctx);
+  else if (state.question) dialog = <Question ctx={ctx} />;
+  else dialog = renderDialog(state.modal?.kind, state.modal?.props, ctx);
   if (!dialog) return null;
   return (
     <Box

@@ -27,6 +27,13 @@ export class PermissionRejectedError extends NamedError {
   }
 }
 
+export class QuestionCancelledError extends NamedError {
+  override readonly name = "QuestionCancelledError";
+  constructor(readonly feedback?: string) {
+    super(feedback ? `Question cancelled: ${feedback}` : "Question cancelled");
+  }
+}
+
 export class AbortedError extends NamedError {
   override readonly name = "AbortedError";
   constructor() {

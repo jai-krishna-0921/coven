@@ -10,6 +10,7 @@ import { webfetchTool } from "./webfetch.ts";
 import { todoTool } from "./todo.ts";
 import { taskTool } from "./task.ts";
 import { skillTool } from "./skill.ts";
+import { questionTool } from "./question.ts";
 
 /** Tool ids the read-only agents are limited to. */
 export const READ_ONLY_TOOLS = ["read", "ls", "glob", "grep", "webfetch", "skill", "todo"] as const;
@@ -26,6 +27,7 @@ export const BUILTIN_TOOLS: ToolDef<never>[] = [
   todoTool,
   taskTool,
   skillTool,
+  questionTool,
 ] as ToolDef<never>[];
 
 export class ToolRegistry {

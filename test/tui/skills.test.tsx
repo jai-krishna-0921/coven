@@ -35,6 +35,7 @@ function makeCtx() {
       setReonboarding: () => {},
       scrollBy: () => {},
     scrollToMessage: () => {},
+    replyQuestion: () => {},
     },
     session: makeSession(),
     abort: new AbortController().signal,

@@ -41,6 +41,7 @@ export interface UiStoreLike {
   setReonboarding(on: boolean): void;
   scrollBy(deltaRows: number): void;   // + = older/up, − = newer/down; clamps; 0 follows tail
   scrollToMessage(messageID: string): void; // anchor the transcript on a specific message; no-op if id not in history
+  replyQuestion(requestID: string, reply: import("../question/types.ts").QuestionReply): void; // wired to app.questions.reply
   clearInput?(): void;                 // optional hook the editor registers for ctrl-c clear
 }
 
@@ -52,6 +53,7 @@ export interface UiState {
   compacting: boolean;
   context: { tokens: number; usable: number; pct: number };
   permission: PermissionRequest | null;
+  question: import("../question/types.ts").QuestionRequest | null;
   modal: { kind: ModalKind; props?: ModalProps } | null;
   reonboarding: boolean;
   sidebarOverlay: boolean;

@@ -16,6 +16,7 @@ function stateWith(session: SessionInfo): UiState {
     compacting: false,
     context: { tokens: 0, usable: 100, pct: 0 },
     permission: null,
+    question: null,
     modal: null,
     reonboarding: false,
     sidebarOverlay: false,

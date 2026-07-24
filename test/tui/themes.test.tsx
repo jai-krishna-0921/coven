@@ -30,6 +30,7 @@ function baseCtx(prefs: UiPrefs, setPrefs: (p: Partial<UiPrefs>) => void, closeM
       setReonboarding: () => {},
       scrollBy: () => {},
     scrollToMessage: () => {},
+    replyQuestion: () => {},
     },
     session: makeSession(),
     abort: new AbortController().signal,

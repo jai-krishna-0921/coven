@@ -31,6 +31,12 @@ export interface ToolContext {
    * the workspace. Safe to call multiple times on the same path.
    */
   captureFile?(path: string): void;
+  /**
+   * Ask the user a multi-choice question and block on the reply — used by the
+   * `question` tool. Undefined in non-interactive contexts (headless runs, no
+   * UI) so tools can degrade gracefully.
+   */
+  askQuestion?(input: import("../question/types.ts").QuestionInput): Promise<string[]>;
 }
 
 export interface ToolResult {
