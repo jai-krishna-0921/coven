@@ -126,7 +126,7 @@ export class McpClient {
         // Declare roots so the server knows Coven can answer roots/list.
         roots: { listChanged: false },
       },
-      clientInfo: { name: "coven", version: "0.5.0" },
+      clientInfo: { name: "coven", version: "0.5.1" },
     })) as { instructions?: string; capabilities?: McpServerCapabilities } | undefined;
     this.serverInstructions = initResult?.instructions;
     this.capabilities = initResult?.capabilities ?? {};

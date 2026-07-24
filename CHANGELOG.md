@@ -3,6 +3,54 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.1] — 2026-07-24
+
+Wave-9 polish tail — the five deferred items from the Wave 7 audit
+that didn't fit into 0.5.0. All shipped as bounded follow-ups; the
+foundational refactors (HTTP `coven serve`, Ink→OpenTUI, Drizzle)
+remain deferred.
+
+### Added
+
+- **Session chord bindings.** `ctrl+z` undo, `ctrl+shift+z` redo,
+  `ctrl+shift+c` copy transcript, `ctrl+shift+k` compact — each gated
+  on an empty prompt buffer so nothing hijacks a mid-composition
+  edit. Palette hint column and WhichKey pick them up automatically.
+- **`/timeline` dialog.** Lists every user message in the current
+  session newest-first with a 60-char preview + relative age.
+  Enter jumps the transcript to that message; `f` forks the session
+  at that message and switches to the fork. New `UiStore.scrollToMessage`
+  + `src/util/relTime.ts` helper.
+- **`DialogExportOptions`.** `/export` now opens a modal with a
+  sanitized filename field and four toggles: include reasoning,
+  include tool details, include assistant metadata, open in $EDITOR
+  (writes to `$TMPDIR` so Ink doesn't lose the TTY). New pure
+  `src/tui/export.ts` module (`sanitizeFilename` strips path
+  separators + control chars + leading dots so a rogue filename
+  can't escape the workspace root).
+- **Delete-recovery flow.** When a session's disk cleanup fails,
+  both TUI (`DeleteRecovery` modal) and CLI (numbered stdin menu)
+  offer four recovery paths — Retry / Move to trash / Force-remove
+  metadata only / Cancel — driven by a shared `performDelete`
+  orchestrator. `SessionStore` gains `deleteChecked`, `retryRm`,
+  `moveToTrash`, `unlinkMetadataOnly`.
+- **`question` tool.** Agent-callable multi-choice user prompt with
+  optional custom-input and multi-select. Complementary to
+  permission asks (permissions gate destructive actions; questions
+  gather decisions). New `src/question/` subsystem mirrors the
+  PermissionEngine pattern — publish on the bus, block on a
+  Deferred, cancel on abort. Inline `Question.tsx` dialog wired
+  with `permission > question > modal` precedence.
+
+### Changed
+
+- `ModalKind` gains `timeline`, `export`, `delete-recovery`.
+- `UiStoreLike` gains `scrollToMessage(id)` and `replyQuestion(id, reply)`.
+- `UiState` gains `question: QuestionRequest | null`.
+- `SessionStore.delete(id)` is now a thin wrapper over
+  `deleteChecked(id)` so all disk-op reporting flows through one
+  code path.
+
 ## [0.5.0] — 2026-07-24
 
 Eight-wave feature parity push against OpenCode's user-visible surface.
