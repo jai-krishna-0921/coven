@@ -16,6 +16,23 @@ describe("resolveKey", () => {
   test("plain up (no shift) falls through to the editor for history", () => expect(resolveKey("", K({upArrow:true}), base)).toBeNull());
   test("ctrl+c → ctrl-c builtin (App owns the state machine)", () => expect(resolveKey("c", K({ctrl:true}), base)).toEqual({ kind:"builtin", name:"ctrl-c" }));
   test("ctrl+c ignored while modal open (falls to modal.close via esc path only)", () => expect(resolveKey("c", K({ctrl:true}), { ...base, modalOpen:true })).toEqual({ kind:"builtin", name:"modal.close" }));
+
+  // Wave 9 — session-scoped chord bindings, all gated on bufferEmpty so a mid-composition
+  // edit is never hijacked. Shift-modified variants distinguish undo/redo and copy/interrupt.
+  test("ctrl+z on empty buffer → session.undo", () => expect(resolveKey("z", K({ctrl:true}), base)).toEqual({ kind:"command", id:"session.undo" }));
+  test("ctrl+z with text falls through to editor", () => expect(resolveKey("z", K({ctrl:true}), { ...base, bufferEmpty:false })).toBeNull());
+  test("ctrl+shift+z on empty buffer → session.redo", () => expect(resolveKey("z", K({ctrl:true,shift:true}), base)).toEqual({ kind:"command", id:"session.redo" }));
+  test("ctrl+shift+z with text falls through", () => expect(resolveKey("z", K({ctrl:true,shift:true}), { ...base, bufferEmpty:false })).toBeNull());
+  test("ctrl+shift+c on empty buffer → session.copy", () => expect(resolveKey("c", K({ctrl:true,shift:true}), base)).toEqual({ kind:"command", id:"session.copy" }));
+  test("ctrl+shift+c with text falls through (does NOT emit ctrl-c)", () => expect(resolveKey("c", K({ctrl:true,shift:true}), { ...base, bufferEmpty:false })).toBeNull());
+  test("ctrl+c (no shift) still resolves to ctrl-c builtin even on empty buffer", () => expect(resolveKey("c", K({ctrl:true}), base)).toEqual({ kind:"builtin", name:"ctrl-c" }));
+  test("ctrl+shift+k on empty buffer → session.compact", () => expect(resolveKey("k", K({ctrl:true,shift:true}), base)).toEqual({ kind:"command", id:"session.compact" }));
+  test("ctrl+shift+k with text falls through", () => expect(resolveKey("k", K({ctrl:true,shift:true}), { ...base, bufferEmpty:false })).toBeNull());
+  test("ctrl+k (no shift) still opens the command palette", () => expect(resolveKey("k", K({ctrl:true}), base)).toEqual({ kind:"command", id:"command.palette" }));
+  test("plain 'z' returns null on empty and non-empty buffers", () => {
+    expect(resolveKey("z", K(), base)).toBeNull();
+    expect(resolveKey("z", K(), { ...base, bufferEmpty:false })).toBeNull();
+  });
 });
 
 describe("BINDINGS", () => {
@@ -29,5 +46,11 @@ describe("BINDINGS", () => {
       expect(b.action.length).toBeGreaterThan(0);
       expect(b.category.length).toBeGreaterThan(0);
     }
+  });
+  test("Wave 9 chord display rows are present", () => {
+    expect(BINDINGS).toContainEqual({ key: "ctrl+z", action: "Undo last turn", category: "Session" });
+    expect(BINDINGS).toContainEqual({ key: "ctrl+shift+z", action: "Redo last undo", category: "Session" });
+    expect(BINDINGS).toContainEqual({ key: "ctrl+shift+c", action: "Copy transcript", category: "Session" });
+    expect(BINDINGS).toContainEqual({ key: "ctrl+shift+k", action: "Compact session", category: "Session" });
   });
 });

@@ -131,7 +131,7 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
     },
     { id: "session.list", title: "Sessions", slash: "sessions", category: "Session", keybinding: "ctrl+s", run: (c) => c.openModal("sessions") },
     { id: "session.resume", title: "Resume session", slash: "resume", category: "Session", run: (c) => c.openModal("sessions") },
-    { id: "session.compact", title: "Compact session", slash: "compact", category: "Session", run: async (c) => { await c.app.engine.compact(c.session.id, { auto: false, abort: c.abort }); } },
+    { id: "session.compact", title: "Compact session", slash: "compact", category: "Session", keybinding: "ctrl+shift+k", run: async (c) => { await c.app.engine.compact(c.session.id, { auto: false, abort: c.abort }); } },
     { id: "session.export", title: "Export transcript", slash: "export", category: "Session", run: async (c) => { await c.host.exportTranscript(); } },
     {
       id: "session.rename", title: "Rename session", slash: "rename", category: "Session",
@@ -168,7 +168,7 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
       },
     },
     {
-      id: "session.undo", title: "Undo last turn", slash: "undo", category: "Session",
+      id: "session.undo", title: "Undo last turn", slash: "undo", category: "Session", keybinding: "ctrl+z",
       run: (c) => {
         c.host.interrupt(); // cancel any in-flight turn first
         const outcome = c.app.engine.revert(c.session.id);
@@ -184,7 +184,7 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
       },
     },
     {
-      id: "session.redo", title: "Redo last undo", slash: "redo", category: "Session",
+      id: "session.redo", title: "Redo last undo", slash: "redo", category: "Session", keybinding: "ctrl+shift+z",
       run: (c) => {
         c.app.engine.redo(c.session.id);
         const current = c.app.store.get(c.session.id);
@@ -235,7 +235,7 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
       },
     },
     {
-      id: "session.copy", title: "Copy transcript to clipboard", slash: "copy", category: "Session",
+      id: "session.copy", title: "Copy transcript to clipboard", slash: "copy", category: "Session", keybinding: "ctrl+shift+c",
       run: async (c) => {
         const messages = c.app.store.messagesOf(c.session.id);
         const lines: string[] = [`# ${c.session.title}`, ""];

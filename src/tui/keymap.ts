@@ -68,6 +68,10 @@ export const BINDINGS: Binding[] = [
   { key: "ctrl+u", action: "Kill to line start", category: "Editing" },
   { key: "ctrl+c", action: "Interrupt (twice: quit)", category: "Editing" },
   { key: "ctrl+d", action: "Quit (empty buffer)", category: "Editing" },
+  { key: "ctrl+z", action: "Undo last turn", category: "Session" },
+  { key: "ctrl+shift+z", action: "Redo last undo", category: "Session" },
+  { key: "ctrl+shift+c", action: "Copy transcript", category: "Session" },
+  { key: "ctrl+shift+k", action: "Compact session", category: "Session" },
 ];
 
 export function resolveKey(input: string, key: KeyObject, ctx: KeyContext): KeyAction | null {
@@ -85,7 +89,10 @@ export function resolveKey(input: string, key: KeyObject, ctx: KeyContext): KeyA
   if (key.ctrl) {
     switch (input) {
       case "p":
+        return cmd("command.palette");
       case "k":
+        // ctrl+k opens the palette; ctrl+shift+k compacts (empty buffer only).
+        if (key.shift) return ctx.bufferEmpty ? cmd("session.compact") : null;
         return cmd("command.palette");
       case "n":
         return cmd("session.new");
@@ -106,10 +113,20 @@ export function resolveKey(input: string, key: KeyObject, ctx: KeyContext): KeyA
       case "l":
         return cmd("screen.clear");
       case "c":
+        // ctrl+c is the interrupt/quit state machine; ctrl+shift+c copies the
+        // transcript. Guard the copy on bufferEmpty so typing 'C' while composing
+        // never fires the chord. (Many terminals intercept ctrl+shift+c for their
+        // own copy — the /copy slash covers those users.)
+        if (key.shift) return ctx.bufferEmpty ? cmd("session.copy") : null;
         return builtin("ctrl-c");
       case "d":
         if (ctx.bufferEmpty) return builtin("quit");
         break;
+      case "z":
+        // ctrl+z → undo, ctrl+shift+z → redo. Both gated on an empty buffer so a
+        // 'z' typed into the prompt never triggers an accidental undo.
+        if (!ctx.bufferEmpty) break;
+        return key.shift ? cmd("session.redo") : cmd("session.undo");
     }
   }
 
