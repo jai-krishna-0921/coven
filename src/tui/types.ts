@@ -11,7 +11,7 @@ import type { LspServerStatus } from "../lsp/types.ts";
 export type ModalKind =
   | "palette" | "help" | "whichkey" | "sessions" | "models" | "agents"
   | "themes" | "skills" | "permission" | "status" | "confirm" | "prompt"
-  | "connectors" | "timeline";
+  | "connectors" | "timeline" | "export";
 export type ToastKind = "info" | "success" | "warn" | "error";
 export type PaletteCategory =
   | "System" | "Session" | "Model" | "Agent" | "Theme" | "View"
@@ -26,7 +26,8 @@ export interface Completion {
 export type ModalProps =
   | { kind: "rename"; message: string; initial: string; onSubmit(title: string): void }
   | { kind: "login"; message: string; onSubmit(key: string): void }
-  | { kind: "confirm"; message: string; onYes(): void; onNo(): void };
+  | { kind: "confirm"; message: string; onYes(): void; onNo(): void }
+  | { kind: "export"; defaults: import("./export.ts").ExportOptions; onSubmit(options: import("./export.ts").ExportOptions): void };
 
 // Structural view of UiStore (Task 14) so types.ts has no forward module dependency.
 export interface UiStoreLike {
@@ -68,7 +69,7 @@ export interface CommandHost {           // App-local actions the App injects (T
   redraw(): void;
   openEditor(): Promise<void>;
   attachFile(): void;
-  exportTranscript(): Promise<void>;
+  exportTranscript(options?: import("./export.ts").ExportOptions): Promise<void>;
   interrupt(): void;
   quit(): void;
 }

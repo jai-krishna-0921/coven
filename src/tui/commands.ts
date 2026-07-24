@@ -133,7 +133,22 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
     { id: "session.timeline", title: "Timeline", slash: "timeline", category: "Session", run: (c) => c.openModal("timeline") },
     { id: "session.resume", title: "Resume session", slash: "resume", category: "Session", run: (c) => c.openModal("sessions") },
     { id: "session.compact", title: "Compact session", slash: "compact", category: "Session", keybinding: "ctrl+shift+k", run: async (c) => { await c.app.engine.compact(c.session.id, { auto: false, abort: c.abort }); } },
-    { id: "session.export", title: "Export transcript", slash: "export", category: "Session", run: async (c) => { await c.host.exportTranscript(); } },
+    {
+      id: "session.export", title: "Export transcript", slash: "export", category: "Session",
+      run: (c) => {
+        // Lazy import so commands.ts stays TUI-render-agnostic.
+        void import("./export.ts").then(({ defaultExportOptions }) => {
+          c.openModal("export", {
+            kind: "export",
+            defaults: defaultExportOptions(c.session.id),
+            onSubmit: async (options) => {
+              c.closeModal();
+              await c.host.exportTranscript(options);
+            },
+          });
+        });
+      },
+    },
     {
       id: "session.rename", title: "Rename session", slash: "rename", category: "Session",
       run: (c) =>

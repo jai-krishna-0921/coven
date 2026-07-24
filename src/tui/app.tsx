@@ -276,20 +276,23 @@ function AppShell({
     store.appendSynthetic(message); // and show it in the transcript now
   };
 
-  const exportTranscript = async (): Promise<void> => {
+  const exportTranscript = async (options?: import("./export.ts").ExportOptions): Promise<void> => {
+    const { defaultExportOptions, renderTranscript, sanitizeFilename } = await import("./export.ts");
     const snapshot = store.getSnapshot();
-    const lines: string[] = [`# Coven session — ${snapshot.session.title}\n`];
-    for (const message of app.store.messagesOf(snapshot.session.id)) {
-      lines.push(`## ${message.role === "user" ? "**You**" : `**Coven (${message.agent})**`}\n`);
-      for (const part of message.parts) {
-        if (part.type === "text") lines.push(part.text + "\n");
-        else if (part.type === "tool") lines.push(`> \`${part.tool}\` ${part.title ?? ""} — ${part.status}\n`);
-      }
-    }
-    const file = join(app.loaded.root, `coven-${snapshot.session.id.slice(-8)}.md`);
+    const opts = options ?? defaultExportOptions(snapshot.session.id);
+    const body = renderTranscript(app.store.messagesOf(snapshot.session.id), snapshot.session, opts);
+    const filename = sanitizeFilename(opts.filename, snapshot.session.id);
+    // openInEditor writes to tmp instead of the project root — spawning $EDITOR
+    // while Ink owns the tty is unsafe; toast the path so the user can open it.
+    const { tmpdir } = await import("node:os");
+    const targetDir = opts.openInEditor ? tmpdir() : app.loaded.root;
+    const file = join(targetDir, filename);
     try {
-      writeFileSync(file, lines.join("\n"));
-      store.toast(`exported → ${file}`, "success");
+      writeFileSync(file, body);
+      store.toast(
+        opts.openInEditor ? `exported → ${file} (open in your editor)` : `exported → ${file}`,
+        "success",
+      );
     } catch (error) {
       store.toast(errMsg(error), "error");
     }

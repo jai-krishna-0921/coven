@@ -10,6 +10,7 @@
 import { Box } from "ink";
 import type { ReactNode } from "react";
 import { Timeline } from "./Timeline.tsx";
+import { DialogExportOptions } from "./DialogExportOptions.tsx";
 import { useTheme, useUi } from "../context.tsx";
 import type { CommandContext, ModalKind, ModalProps } from "../types.ts";
 import { Palette } from "./Palette.tsx";
@@ -68,6 +69,11 @@ function renderDialog(kind: ModalKind | undefined, props: ModalProps | undefined
     case "confirm":
       if (props && props.kind === "confirm") {
         return <Confirm message={props.message} onYes={props.onYes} onNo={props.onNo} />;
+      }
+      return null;
+    case "export":
+      if (props && props.kind === "export") {
+        return <DialogExportOptions defaults={props.defaults} onSubmit={props.onSubmit} onCancel={ctx.closeModal} />;
       }
       return null;
     default:
