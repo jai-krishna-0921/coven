@@ -113,7 +113,7 @@ function isPrintable(input: string, key: Key): boolean {
   );
 }
 
-export function App({ app }: { app: App }) {
+export function App({ app, initialSessionID }: { app: App; initialSessionID?: string }) {
   const [prefs, setPrefsState] = useState<UiPrefs>(() => loadPrefs());
 
   const setPrefs = useCallback((patch: Partial<UiPrefs>): void => {
@@ -129,12 +129,20 @@ export function App({ app }: { app: App }) {
   }, []);
 
   // The store + its session are created exactly once (ref-guarded, not per render).
+  // If `initialSessionID` names an existing session, resume it; otherwise fall
+  // back to a fresh session so a stale id can't strand the user.
   const storeRef = useRef<UiStore | null>(null);
   if (!storeRef.current) {
-    const configured = app.loaded.config.default_agent ?? "builder";
-    const agentName = app.agents.get(configured) ? configured : "builder";
-    const session = app.store.create({ agent: agentName });
-    storeRef.current = new UiStore(app, session.id);
+    let sessionId: string;
+    if (initialSessionID && app.store.get(initialSessionID)) {
+      sessionId = initialSessionID;
+    } else {
+      const configured = app.loaded.config.default_agent ?? "builder";
+      const agentName = app.agents.get(configured) ? configured : "builder";
+      const session = app.store.create({ agent: agentName });
+      sessionId = session.id;
+    }
+    storeRef.current = new UiStore(app, sessionId);
   }
   const store = storeRef.current;
 

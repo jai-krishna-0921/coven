@@ -4,7 +4,7 @@
  *   messages.jsonl  — one Message per line, append-ordered
  * Messages are rewritten in full on update (files are small; simplicity wins).
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
@@ -54,6 +54,21 @@ export class SessionStore {
     session.updated = Date.now();
     this.sessions.set(session.id, session);
     this.persistInfo(session);
+  }
+
+  /**
+   * Remove a session from memory and best-effort delete its on-disk directory.
+   * A read-only HOME (or a missing dir) is not an error — the session vanishes
+   * from the in-memory cache either way; disk cleanup is opportunistic.
+   */
+  delete(sessionID: string): void {
+    this.sessions.delete(sessionID);
+    this.messages.delete(sessionID);
+    try {
+      rmSync(this.dirOf(sessionID), { recursive: true, force: true });
+    } catch {
+      /* best effort — persistence layer may already be disabled */
+    }
   }
 
   list(): SessionInfo[] {

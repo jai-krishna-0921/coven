@@ -22,12 +22,18 @@ export interface RunTuiDeps {
   /** Override the non-TTY branch (defaults to {@link runFallbackRepl}). */
   fallback?: (app: App) => Promise<void>;
   /** Override the Ink mount branch (defaults to {@link mountInk}). */
-  mount?: (app: App) => Promise<void>;
+  mount?: (app: App, initialSessionID?: string) => Promise<void>;
+  /**
+   * Pre-select an existing session id to open on mount (matches OpenCode's
+   * `--continue` / `--session`). If the id is not found the TUI falls back to
+   * creating a fresh session so a stale id can't strand the user.
+   */
+  initialSessionID?: string;
 }
 
 /** Mount the full-screen Ink app in the alternate screen; unmount before rethrow. */
-async function mountInk(app: App): Promise<void> {
-  const instance = render(createElement(AppRoot, { app }), { alternateScreen: true, exitOnCtrlC: false });
+async function mountInk(app: App, initialSessionID?: string): Promise<void> {
+  const instance = render(createElement(AppRoot, { app, initialSessionID }), { alternateScreen: true, exitOnCtrlC: false });
   try {
     await instance.waitUntilExit();
   } catch (error) {
@@ -48,5 +54,5 @@ export async function runTui(app: App, deps: RunTuiDeps = {}): Promise<void> {
     await fallback(app);
     return;
   }
-  await mount(app);
+  await mount(app, deps.initialSessionID);
 }
