@@ -205,6 +205,10 @@ export class LspHost {
       this.hoverTool(),
       this.definitionTool(),
       this.referencesTool(),
+      this.implementationTool(),
+      this.documentSymbolTool(),
+      this.workspaceSymbolTool(),
+      this.callHierarchyTool(),
     ] as ToolDef<never>[];
   }
 
@@ -287,10 +291,183 @@ export class LspHost {
     });
   }
 
+  private implementationTool(): ToolDef<{ path: string; line: number; character: number }> {
+    return defineTool({
+      id: "lsp_implementation",
+      description: "Go to implementation(s) of the symbol at 1-based line:character (interfaces → concrete types, etc).",
+      parameters: z.object({ path: z.string(), line: z.number().int().positive(), character: z.number().int().positive() }),
+      execute: async (args) => {
+        const opened = this.ensureOpen(this.abs(args.path));
+        if ("error" in opened) return { title: `lsp implementation ${args.path}`, output: opened.error, metadata: { isError: true } };
+        const result = await opened.entry.client
+          .implementation(opened.uri, { line: args.line - 1, character: args.character - 1 })
+          .catch(() => null);
+        const locs = this.locations(result);
+        if (locs.length === 0) return { title: `lsp implementation ${args.path}`, output: "No implementation found." };
+        const out = locs.map((l) => `${this.rel(l.uri)}:${l.range.start.line + 1}:${l.range.start.character + 1}`).join("\n");
+        return { title: `lsp implementation ${args.path}:${args.line}:${args.character}`, output: truncateOutput(out), metadata: { count: locs.length } };
+      },
+    });
+  }
+
+  private documentSymbolTool(): ToolDef<{ path: string }> {
+    return defineTool({
+      id: "lsp_document_symbol",
+      description: "List the symbols (classes/functions/methods/vars) declared in a file, as a flat name → line:col:kind list.",
+      parameters: z.object({ path: z.string() }),
+      execute: async (args) => {
+        const opened = this.ensureOpen(this.abs(args.path));
+        if ("error" in opened) return { title: `lsp symbols ${args.path}`, output: opened.error, metadata: { isError: true } };
+        const symbols = await opened.entry.client.documentSymbol(opened.uri).catch(() => [] as unknown[]);
+        const flat = flattenSymbols(symbols);
+        if (flat.length === 0) return { title: `lsp symbols ${args.path}`, output: "No symbols reported." };
+        const out = flat
+          .slice(0, 500)
+          .map((s) => `${SYMBOL_KIND[s.kind ?? 0] ?? "?"} ${s.line + 1}:${s.character + 1} ${s.name}`)
+          .join("\n");
+        return { title: `lsp symbols ${args.path}`, output: truncateOutput(out), metadata: { count: flat.length } };
+      },
+    });
+  }
+
+  private workspaceSymbolTool(): ToolDef<{ query: string }> {
+    return defineTool({
+      id: "lsp_workspace_symbol",
+      description: "Search all workspace files for a symbol by name (across every started language server). Cap: 10 hits/server.",
+      parameters: z.object({ query: z.string().describe("Case-insensitive symbol name / substring") }),
+      execute: async (args) => {
+        const perServer = await Promise.all(
+          [...this.servers.values()].map(async (entry) => {
+            try {
+              const hits = (await entry.client.workspaceSymbol(args.query)) as WorkspaceSymbol[];
+              return hits.slice(0, 10);
+            } catch {
+              return [] as WorkspaceSymbol[];
+            }
+          }),
+        );
+        const all = perServer.flat();
+        if (all.length === 0) return { title: `lsp workspace-symbol "${args.query}"`, output: "No matches." };
+        const out = all
+          .map((s) => {
+            const loc = s.location ?? (s as { locations?: unknown[] }).locations?.[0];
+            const uri = loc && typeof loc === "object" && "uri" in loc ? (loc as { uri: string }).uri : "";
+            const line =
+              loc && typeof loc === "object" && "range" in loc
+                ? ((loc as { range: { start: { line: number } } }).range.start.line + 1)
+                : 0;
+            const rel = uri ? this.rel(uri) : "?";
+            return `${SYMBOL_KIND[s.kind ?? 0] ?? "?"} ${rel}:${line} ${s.name}`;
+          })
+          .join("\n");
+        return { title: `lsp workspace-symbol "${args.query}"`, output: truncateOutput(out), metadata: { count: all.length } };
+      },
+    });
+  }
+
+  private callHierarchyTool(): ToolDef<{ path: string; line: number; character: number; direction: "incoming" | "outgoing" }> {
+    return defineTool({
+      id: "lsp_call_hierarchy",
+      description:
+        "Show who calls this function (direction=incoming) or which functions this one calls (direction=outgoing). Runs prepareCallHierarchy first.",
+      parameters: z.object({
+        path: z.string(),
+        line: z.number().int().positive(),
+        character: z.number().int().positive(),
+        direction: z.enum(["incoming", "outgoing"]).default("incoming"),
+      }),
+      execute: async (args) => {
+        const opened = this.ensureOpen(this.abs(args.path));
+        if ("error" in opened) return { title: `lsp call-hierarchy ${args.path}`, output: opened.error, metadata: { isError: true } };
+        const items = await opened.entry.client
+          .prepareCallHierarchy(opened.uri, { line: args.line - 1, character: args.character - 1 })
+          .catch(() => [] as unknown[]);
+        if (items.length === 0) {
+          return { title: `lsp call-hierarchy ${args.path}`, output: "No call-hierarchy item at position." };
+        }
+        const calls = await Promise.all(
+          items.map((item) =>
+            args.direction === "outgoing"
+              ? opened.entry.client.outgoingCalls(item).catch(() => [] as unknown[])
+              : opened.entry.client.incomingCalls(item).catch(() => [] as unknown[]),
+          ),
+        );
+        const flat = calls.flat() as Array<{ from?: CallHierarchyItem; to?: CallHierarchyItem; fromRanges?: unknown[] }>;
+        if (flat.length === 0) return { title: `lsp call-hierarchy ${args.path}`, output: `No ${args.direction} calls.` };
+        const rendered = flat
+          .map((entry) => {
+            const target = args.direction === "outgoing" ? entry.to : entry.from;
+            if (!target) return "";
+            const uri = target.uri ?? "";
+            const line = target.range?.start?.line ?? target.selectionRange?.start?.line ?? 0;
+            return `${SYMBOL_KIND[target.kind ?? 0] ?? "?"} ${uri ? this.rel(uri) : "?"}:${line + 1} ${target.name}`;
+          })
+          .filter(Boolean)
+          .join("\n");
+        return {
+          title: `lsp call-hierarchy ${args.direction} ${args.path}:${args.line}:${args.character}`,
+          output: truncateOutput(rendered),
+          metadata: { count: flat.length },
+        };
+      },
+    });
+  }
+
   async dispose(): Promise<void> {
     await Promise.all([...this.servers.values()].map((e) => e.client.shutdown().catch(() => {})));
   }
 }
+
+interface WorkspaceSymbol {
+  name: string;
+  kind?: number;
+  location?: { uri: string; range: { start: { line: number; character: number } } };
+}
+
+interface CallHierarchyItem {
+  name: string;
+  kind?: number;
+  uri: string;
+  range?: { start: { line: number; character: number } };
+  selectionRange?: { start: { line: number; character: number } };
+}
+
+interface FlatSymbol {
+  name: string;
+  kind?: number;
+  line: number;
+  character: number;
+}
+
+/** Flatten either DocumentSymbol (nested `children`) or SymbolInformation (flat with `location`). */
+function flattenSymbols(symbols: unknown[]): FlatSymbol[] {
+  const out: FlatSymbol[] = [];
+  function walk(entry: unknown, prefix?: string) {
+    if (!entry || typeof entry !== "object") return;
+    const e = entry as {
+      name: string;
+      kind?: number;
+      range?: { start: { line: number; character: number } };
+      selectionRange?: { start: { line: number; character: number } };
+      location?: { range: { start: { line: number; character: number } } };
+      children?: unknown[];
+    };
+    const start = e.selectionRange?.start ?? e.range?.start ?? e.location?.range.start;
+    if (start) {
+      out.push({ name: prefix ? `${prefix}.${e.name}` : e.name, kind: e.kind, line: start.line, character: start.character });
+    }
+    for (const child of e.children ?? []) walk(child, prefix ? `${prefix}.${e.name}` : e.name);
+  }
+  for (const entry of symbols) walk(entry);
+  return out;
+}
+
+const SYMBOL_KIND: Record<number, string> = {
+  1: "file", 2: "module", 3: "namespace", 4: "package", 5: "class", 6: "method", 7: "property",
+  8: "field", 9: "constructor", 10: "enum", 11: "interface", 12: "function", 13: "variable",
+  14: "constant", 15: "string", 16: "number", 17: "boolean", 18: "array", 19: "object", 20: "key",
+  21: "null", 22: "enum-member", 23: "struct", 24: "event", 25: "operator", 26: "type-parameter",
+};
 
 /** LSP hover `contents` is markup | markup[] | {language,value}[] — flatten to text. */
 function renderHover(contents: unknown): string {

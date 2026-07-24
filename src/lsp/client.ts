@@ -98,9 +98,16 @@ export class LspClient {
           hover: { contentFormat: ["plaintext", "markdown"] },
           definition: {},
           references: {},
+          implementation: {},
+          documentSymbol: { hierarchicalDocumentSymbolSupport: true },
+          callHierarchy: { dynamicRegistration: false },
           publishDiagnostics: {},
         },
-        workspace: { workspaceFolders: true, configuration: true },
+        workspace: {
+          workspaceFolders: true,
+          configuration: true,
+          symbol: { dynamicRegistration: false },
+        },
       },
       clientInfo: { name: "coven", version: "0.4.1" },
     });
@@ -133,6 +140,46 @@ export class LspClient {
       position,
       context: { includeDeclaration: true },
     })) as Location[] | null;
+    return result ?? [];
+  }
+
+  async implementation(uri: string, position: Position): Promise<Location | Location[] | null> {
+    return (await this.request("textDocument/implementation", { textDocument: { uri }, position })) as
+      | Location
+      | Location[]
+      | null;
+  }
+
+  /**
+   * Return the file's symbol tree. Language servers may reply with either the
+   * hierarchical `DocumentSymbol` shape or the flat `SymbolInformation` shape;
+   * we hand both back as-is and let the tool renderer flatten.
+   */
+  async documentSymbol(uri: string): Promise<unknown[]> {
+    const result = (await this.request("textDocument/documentSymbol", { textDocument: { uri } })) as unknown[] | null;
+    return result ?? [];
+  }
+
+  /** Workspace-wide symbol search — most servers respect an empty string too. */
+  async workspaceSymbol(query: string): Promise<unknown[]> {
+    const result = (await this.request("workspace/symbol", { query })) as unknown[] | null;
+    return result ?? [];
+  }
+
+  async prepareCallHierarchy(uri: string, position: Position): Promise<unknown[]> {
+    const result = (await this.request("textDocument/prepareCallHierarchy", { textDocument: { uri }, position })) as
+      | unknown[]
+      | null;
+    return result ?? [];
+  }
+
+  async incomingCalls(item: unknown): Promise<unknown[]> {
+    const result = (await this.request("callHierarchy/incomingCalls", { item })) as unknown[] | null;
+    return result ?? [];
+  }
+
+  async outgoingCalls(item: unknown): Promise<unknown[]> {
+    const result = (await this.request("callHierarchy/outgoingCalls", { item })) as unknown[] | null;
     return result ?? [];
   }
 
