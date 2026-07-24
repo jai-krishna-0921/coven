@@ -151,6 +151,22 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
         }),
     },
     { id: "session.interrupt", title: "Interrupt", slash: "interrupt", category: "Session", run: (c) => c.host.interrupt() },
+    {
+      id: "session.fork", title: "Fork session", slash: "fork", category: "Session",
+      run: (c) => {
+        const forked = c.app.store.fork(c.session.id);
+        c.app.bus.publish({ type: "session.created", session: forked });
+        c.store.setSessionID(forked.id);
+      },
+    },
+    {
+      id: "session.archive", title: "Archive session", slash: "archive", category: "Session",
+      run: (c) => {
+        c.app.store.setArchived(c.session.id, true);
+        const current = c.app.store.get(c.session.id);
+        if (current) c.app.bus.publish({ type: "session.updated", session: current });
+      },
+    },
 
     // ---- Model / Agent ----
     { id: "model.picker", title: "Model picker", slash: "models", category: "Model", keybinding: "ctrl+o", run: (c) => c.openModal("models") },

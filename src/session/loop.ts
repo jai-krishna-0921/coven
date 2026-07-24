@@ -154,6 +154,10 @@ export class SessionEngine {
     if (session.title === "New session") {
       session.title = text.length > 64 ? text.slice(0, 61) + "…" : text;
     }
+    // Remember whether this turn is the FIRST user turn — after it completes we
+    // fire an LLM title generator so the sidebar shows something better than a
+    // truncated prompt. Fire-and-forget: it never blocks the turn's return.
+    const isFirstUserTurn = this.o.store.messagesOf(sessionID).filter((m) => m.role === "user" && !m.compaction).length === 0;
 
     const userMessage: Message = {
       id: createId("msg"),
@@ -168,11 +172,73 @@ export class SessionEngine {
     this.o.bus.publish({ type: "session.status", sessionID, status: "busy" });
 
     try {
-      return await this.runLoop(sessionID, agent, abort, override);
+      const result = await this.runLoop(sessionID, agent, abort, override);
+      // Only fire the LLM title generator when the turn produced actual
+      // assistant text — an empty scripted turn (or a hard failure that left
+      // parts empty) should NOT trigger the small_model resolver.
+      const lastAssistant = this.o.store.messagesOf(sessionID).filter((m) => m.role === "assistant" && !m.summary).at(-1);
+      const hasAssistantText = lastAssistant?.parts.some((p) => p.type === "text" && p.text.trim().length > 0) ?? false;
+      if (isFirstUserTurn && hasAssistantText) void this.ensureTitle(sessionID).catch(() => { /* best-effort */ });
+      return result;
     } finally {
       this.o.bus.publish({ type: "session.status", sessionID, status: "idle" });
       this.o.store.update(session);
     }
+  }
+
+  /**
+   * Auto-generate a short, specific title from the first user turn using the
+   * small_model. Only overwrites when the current title still looks like the
+   * naive fallback (truncated user prompt). Runs fire-and-forget after the
+   * first assistant turn — never blocks the caller.
+   */
+  async ensureTitle(sessionID: string): Promise<void> {
+    const session = this.o.store.get(sessionID);
+    if (!session) return;
+    const messages = this.o.store.messagesOf(sessionID);
+    const firstUser = messages.find((m) => m.role === "user" && !m.compaction);
+    if (!firstUser) return;
+    const seed = firstUser.parts
+      .filter((p) => p.type === "text")
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join("\n")
+      .trim();
+    if (!seed) return;
+    // Preserve titles the user set explicitly — only replace the naive fallback.
+    const naive = seed.length > 64 ? seed.slice(0, 61) + "…" : seed;
+    if (session.title !== "New session" && session.title !== naive) return;
+
+    const modelRef = this.o.config.small_model ?? this.o.config.model ?? DEFAULT_MODEL;
+    const { adapter, ref } = this.o.providers.resolve(modelRef);
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), 15_000);
+    let title = "";
+    try {
+      for await (const event of adapter.stream({
+        model: ref.modelID,
+        system:
+          "You name conversations. Reply with ONLY a short, specific title (3-8 words, no quotes, no punctuation at the end). Match the user's language.",
+        messages: [
+          { role: "user", content: [{ type: "text", text: `Give this conversation a title:\n\n${seed.slice(0, 4000)}` }] },
+        ],
+        tools: [],
+        maxTokens: 40,
+        abort: abort.signal,
+      })) {
+        if (event.type === "text-delta") title += event.text;
+      }
+    } catch {
+      return;
+    } finally {
+      clearTimeout(timeout);
+    }
+    title = title.trim().replace(/^["'`]|["'`]$/g, "").replace(/[.。!!?？]+$/, "").slice(0, 100);
+    if (!title) return;
+    const fresh = this.o.store.get(sessionID);
+    if (!fresh) return;
+    fresh.title = title;
+    this.o.store.update(fresh);
+    this.o.bus.publish({ type: "session.updated", session: fresh });
   }
 
   /** Current context usage for the status line: last turn's total vs usable window. */

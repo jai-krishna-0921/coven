@@ -29,6 +29,12 @@ export interface SessionInfo {
   usage: Usage;
   /** Accumulated cost in USD, computed from catalog pricing. */
   cost?: number;
+  /** Free-form metadata blob for integrations (PR refs, parent-job IDs, etc.). */
+  metadata?: Record<string, unknown>;
+  /** Archived sessions are hidden from `list()` unless `{archived: true}` is passed. */
+  archived?: boolean;
+  /** Timestamp of archival — kept even if `archived` flips back for audit. */
+  archivedAt?: number;
 }
 
 export type ToolStatus = "pending" | "running" | "completed" | "error";

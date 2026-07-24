@@ -127,7 +127,10 @@ async function sessionCommand(positional: string[], flags: Map<string, string | 
   const app = await createApp();
   try {
     if (sub === "list" || sub === "ls") {
-      const all = app.store.list();
+      const all = app.store.list({
+        archived: flags.get("archived") === true,
+        search: typeof flags.get("search") === "string" ? (flags.get("search") as string) : undefined,
+      });
       const limit = Number(flags.get("n")) || all.length;
       const shown = all.slice(0, limit);
       if (flags.get("format") === "json") {
@@ -140,6 +143,36 @@ async function sessionCommand(positional: string[], flags: Map<string, string | 
       }
       for (const s of shown) console.log(formatSessionRow(s));
       if (all.length > shown.length) console.log(dim(`… ${all.length - shown.length} more — use -n <N> to widen`));
+      return;
+    }
+    if (sub === "fork") {
+      const id = positional[2];
+      if (!id) {
+        console.error(`${red("✗")} usage: coven session fork <session-id>`);
+        process.exit(1);
+      }
+      const target = app.store.list({ archived: true }).find((s) => s.id === id || s.id.endsWith(id));
+      if (!target) {
+        console.error(`${red("✗")} no such session: ${id}`);
+        process.exit(1);
+      }
+      const forked = app.store.fork(target.id);
+      console.log(`${green("✓")} forked ${target.id.slice(-10)} → ${bold(forked.title)}  ${dim(forked.id)}`);
+      return;
+    }
+    if (sub === "archive" || sub === "unarchive") {
+      const id = positional[2];
+      if (!id) {
+        console.error(`${red("✗")} usage: coven session ${sub} <session-id>`);
+        process.exit(1);
+      }
+      const target = app.store.list({ archived: true }).find((s) => s.id === id || s.id.endsWith(id));
+      if (!target) {
+        console.error(`${red("✗")} no such session: ${id}`);
+        process.exit(1);
+      }
+      app.store.setArchived(target.id, sub === "archive");
+      console.log(`${green("✓")} ${sub}d ${target.id.slice(-10)}`);
       return;
     }
     if (sub === "delete" || sub === "rm") {
@@ -184,7 +217,9 @@ async function sessionCommand(positional: string[], flags: Map<string, string | 
       console.log(`${green("✓")} imported as ${newID}`);
       return;
     }
-    console.log("usage: coven session [list [--format json] [-n <N>]|delete <id>|export [id] [--redact off|text|aggressive]|import <file>]");
+    console.log(
+      "usage: coven session [list [-n <N>] [--format json] [--search <s>] [--archived]|delete <id>|fork <id>|archive <id>|unarchive <id>|export [id] [--redact off|text|aggressive]|import <file>]",
+    );
   } finally {
     await app.dispose();
   }
@@ -283,7 +318,7 @@ function parseFlags(args: string[]): ParsedFlags {
   const flags = new Map<string, string | true>();
   const positional: string[] = [];
   const takesValue = new Set([
-    "prompt", "agent", "session", "model", "format", "redact", "attach", "method", "n",
+    "prompt", "agent", "session", "model", "format", "redact", "attach", "method", "n", "search",
   ]);
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
@@ -304,6 +339,7 @@ function parseFlags(args: string[]): ParsedFlags {
     }
     else if (arg === "--attach") flags.set("attach", args[++i] ?? "");
     else if (arg === "--method") flags.set("method", args[++i] ?? "");
+    else if (arg === "--search") flags.set("search", args[++i] ?? "");
     else if (arg === "-n") flags.set("n", args[++i] ?? "");
     else if (arg === "--yes" || arg === "-y") flags.set("yes", true);
     else if (arg.startsWith("--")) {

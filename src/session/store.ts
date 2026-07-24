@@ -71,14 +71,84 @@ export class SessionStore {
     }
   }
 
-  list(): SessionInfo[] {
+  list(opts: { search?: string; archived?: boolean } = {}): SessionInfo[] {
     if (existsSync(this.baseDir)) {
       for (const id of readdirSync(this.baseDir)) {
         if (!this.sessions.has(id)) this.loadSession(id);
       }
     }
-    // Subagent sessions are internal — list only top-level ones.
-    return [...this.sessions.values()].filter((s) => !s.parentID).sort((a, b) => b.updated - a.updated);
+    const term = opts.search?.trim().toLowerCase();
+    return [...this.sessions.values()]
+      // Subagent sessions are internal — list only top-level ones.
+      .filter((s) => !s.parentID)
+      .filter((s) => opts.archived === true ? true : !s.archived)
+      .filter((s) => (term ? s.title.toLowerCase().includes(term) : true))
+      .sort((a, b) => b.updated - a.updated);
+  }
+
+  /**
+   * Attach a free-form metadata blob to a session. Overwrites any previous
+   * value — callers wanting merge semantics should read + spread first.
+   */
+  setMetadata(sessionID: string, metadata: Record<string, unknown>): void {
+    const session = this.get(sessionID);
+    if (!session) return;
+    session.metadata = metadata;
+    this.update(session);
+  }
+
+  /**
+   * Archive or unarchive a session. Archived sessions vanish from `list()` by
+   * default; `list({archived: true})` shows them for browsing/restoration.
+   */
+  setArchived(sessionID: string, archived: boolean): void {
+    const session = this.get(sessionID);
+    if (!session) return;
+    session.archived = archived;
+    if (archived) session.archivedAt = Date.now();
+    this.update(session);
+  }
+
+  /**
+   * Clone a session into a fresh id, optionally truncating to messages up to
+   * (and including) `upToMessageID`. Useful for "try this a different way"
+   * without losing the original transcript. Fork counts are appended to the
+   * title (`Original (fork #N)`) — matching OpenCode's naming — by inspecting
+   * peers with the same base title.
+   */
+  fork(sourceID: string, upToMessageID?: string): SessionInfo {
+    const source = this.get(sourceID);
+    if (!source) throw new Error(`no such session: ${sourceID}`);
+    const baseTitle = source.title.replace(/\s+\(fork #\d+\)$/, "");
+    const forkNumber =
+      this.list({ archived: true })
+        .filter((s) => s.title === baseTitle || s.title.startsWith(`${baseTitle} (fork #`))
+        .length; // includes original, so first fork is #1
+    const forked = this.create({ agent: source.agent, title: `${baseTitle} (fork #${forkNumber})` });
+    if (source.model) {
+      forked.model = source.model;
+      this.update(forked);
+    }
+    const messages = this.messagesOf(sourceID);
+    const cutoff = upToMessageID ? messages.findIndex((m) => m.id === upToMessageID) : messages.length - 1;
+    const keep = cutoff >= 0 ? messages.slice(0, cutoff + 1) : messages;
+    for (const msg of keep) {
+      this.appendMessage({ ...msg, sessionID: forked.id, parts: msg.parts.map((p) => ({ ...p })) });
+    }
+    return forked;
+  }
+
+  /**
+   * Return a window of messages counted from the tail. `offset` is how many
+   * messages to skip back from the newest end (0 = newest), `limit` is the
+   * page size. Long sessions can page backward through history without loading
+   * the whole array up front. The returned window is in chronological order.
+   */
+  messagePage(sessionID: string, offset: number, limit: number): Message[] {
+    const all = this.messagesOf(sessionID);
+    const end = Math.max(0, all.length - Math.max(0, offset));
+    const start = Math.max(0, end - Math.max(0, limit));
+    return all.slice(start, end);
   }
 
   messagesOf(sessionID: string): Message[] {

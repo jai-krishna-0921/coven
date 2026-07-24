@@ -54,11 +54,26 @@ interface PendingAsk {
 export class PermissionEngine {
   private pending = new Map<string, PendingAsk>();
   private approved: Ruleset = [];
+  private sessionRules = new Map<string, Ruleset>();
 
   constructor(
     private bus: Bus,
     private baseline: Ruleset,
   ) {}
+
+  /**
+   * Attach or replace a session-scoped ruleset. Precedence (last-match-wins):
+   *   baseline → agent rules → session rules → approved.
+   * Passing an empty array clears the session's rules.
+   */
+  setSessionRules(sessionID: string, ruleset: Ruleset): void {
+    if (ruleset.length === 0) this.sessionRules.delete(sessionID);
+    else this.sessionRules.set(sessionID, ruleset);
+  }
+
+  getSessionRules(sessionID: string): Ruleset {
+    return this.sessionRules.get(sessionID) ?? [];
+  }
 
   /** Resolve the effective action without side effects (used for tool filtering). */
   resolve(permission: string, pattern: string, ...extra: Ruleset[]): PermissionRule {
@@ -70,9 +85,10 @@ export class PermissionEngine {
    * on user rejection; resolves silently when allowed.
    */
   async ask(sessionID: string, input: AskInput, agentRules: Ruleset = [], signal?: AbortSignal): Promise<void> {
+    const sessionRules = this.sessionRules.get(sessionID) ?? [];
     const needsAsk: string[] = [];
     for (const pattern of input.patterns.length > 0 ? input.patterns : ["*"]) {
-      const rule = this.resolve(input.permission, pattern, agentRules);
+      const rule = this.resolve(input.permission, pattern, agentRules, sessionRules);
       if (rule.action === "deny") throw new PermissionDeniedError(input.permission, pattern);
       if (rule.action === "ask") needsAsk.push(pattern);
     }
