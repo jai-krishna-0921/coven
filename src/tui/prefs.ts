@@ -13,12 +13,17 @@ export interface UiPrefs {
   logo: "block" | "ascii";
   borders: "unicode" | "ascii";
   recentModels: string[];
+  /** Show <thinking> blocks in the transcript. Toggle via /thinking. */
+  showThinking: boolean;
+  /** Prefix each message with its wall-clock time. Toggle via /timestamps. */
+  showTimestamps: boolean;
 }
 
 export const DEFAULT_PREFS: UiPrefs = {
   version: 1, onboarded: false, theme: "coven-dark",
   density: "comfortable", sidebar: true, glyphs: "ascii",
   logo: "block", borders: "unicode", recentModels: [],
+  showThinking: true, showTimestamps: false,
 };
 
 export function prefsPath(dir: string = join(homedir(), ".local", "share", "coven")): string {

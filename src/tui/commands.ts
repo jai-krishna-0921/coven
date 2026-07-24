@@ -220,6 +220,40 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
       },
     },
     { id: "sidebar.toggle", title: "Toggle sidebar", slash: "sidebar", category: "View", keybinding: "ctrl+b", run: (c) => c.setPrefs({ sidebar: !c.prefs.sidebar }) },
+    {
+      id: "view.timestamps", title: "Toggle timestamps", slash: "timestamps", category: "View",
+      run: (c) => {
+        c.setPrefs({ showTimestamps: !c.prefs.showTimestamps });
+        c.store.toast(c.prefs.showTimestamps ? "timestamps: off" : "timestamps: on", "info");
+      },
+    },
+    {
+      id: "view.thinking", title: "Toggle thinking blocks", slash: "thinking", category: "View",
+      run: (c) => {
+        c.setPrefs({ showThinking: !c.prefs.showThinking });
+        c.store.toast(c.prefs.showThinking ? "thinking: hidden" : "thinking: shown", "info");
+      },
+    },
+    {
+      id: "session.copy", title: "Copy transcript to clipboard", slash: "copy", category: "Session",
+      run: async (c) => {
+        const messages = c.app.store.messagesOf(c.session.id);
+        const lines: string[] = [`# ${c.session.title}`, ""];
+        for (const m of messages) {
+          const stamp = c.prefs.showTimestamps ? ` [${new Date(m.time).toISOString().slice(11, 19)}]` : "";
+          lines.push(`## ${m.role}${stamp}`);
+          for (const p of m.parts) {
+            if (p.type === "text") lines.push(p.text);
+            else if (p.type === "tool") lines.push(`> [${p.tool}] ${p.title ?? ""}\n${p.output ?? ""}`);
+          }
+          lines.push("");
+        }
+        const { copyToClipboard } = await import("../util/clipboard.ts");
+        const ok = await copyToClipboard(lines.join("\n"));
+        c.store.toast(ok ? "transcript copied to clipboard" : "clipboard tool not found (install xclip/wl-copy)", ok ? "success" : "warn");
+      },
+    },
+    { id: "debug.info", title: "Debug info", slash: "debug", category: "System", run: (c) => c.openModal("status") },
 
     // ---- Voice / Skill ----
     {
