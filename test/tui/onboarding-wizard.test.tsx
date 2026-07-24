@@ -94,7 +94,9 @@ describe("OnboardingWizard", () => {
       await tick();
     }
     // connector highlight starts on the first provider; move to the trailing "skip".
-    for (let i = 0; i < 6; i++) {
+    // Wave 8 added 11 providers on top of the original 6 — the "skip" entry is
+    // now at index 17, so 17 down-arrows walks from the first provider to it.
+    for (let i = 0; i < 17; i++) {
       stdin.write("\x1b[B");
       await tick();
     }

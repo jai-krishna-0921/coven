@@ -18,6 +18,28 @@ const KNOWN_BASE_URLS: Record<string, string> = {
   "ollama-cloud": "https://ollama.com/v1",
   // Google Gemini's OpenAI-compat surface (model refs like `gemini/gemini-2.5-flash`).
   gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
+  // xAI Grok — OpenAI-compatible endpoint.
+  xai: "https://api.x.ai/v1",
+  // Mistral La Plateforme — OpenAI-compatible.
+  mistral: "https://api.mistral.ai/v1",
+  // Perplexity Sonar / online models.
+  perplexity: "https://api.perplexity.ai",
+  // Cerebras high-throughput inference.
+  cerebras: "https://api.cerebras.ai/v1",
+  // DeepInfra hosted OSS models.
+  deepinfra: "https://api.deepinfra.com/v1/openai",
+  // Together AI.
+  together: "https://api.together.xyz/v1",
+  // Fireworks AI.
+  fireworks: "https://api.fireworks.ai/inference/v1",
+  // DeepSeek platform.
+  deepseek: "https://api.deepseek.com/v1",
+  // Moonshot Kimi.
+  moonshot: "https://api.moonshot.cn/v1",
+  // Alibaba DashScope (OpenAI-compat endpoint).
+  alibaba: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  // Venice AI — privacy-focused inference.
+  venice: "https://api.venice.ai/api/v1",
 };
 
 const KNOWN_KEY_ENVS: Record<string, string> = {
@@ -27,6 +49,17 @@ const KNOWN_KEY_ENVS: Record<string, string> = {
   openrouter: "OPENROUTER_API_KEY",
   "ollama-cloud": "OLLAMA_API_KEY",
   gemini: "GEMINI_API_KEY",
+  xai: "XAI_API_KEY",
+  mistral: "MISTRAL_API_KEY",
+  perplexity: "PERPLEXITY_API_KEY",
+  cerebras: "CEREBRAS_API_KEY",
+  deepinfra: "DEEPINFRA_API_KEY",
+  together: "TOGETHER_API_KEY",
+  fireworks: "FIREWORKS_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  moonshot: "MOONSHOT_API_KEY",
+  alibaba: "DASHSCOPE_API_KEY",
+  venice: "VENICE_API_KEY",
 };
 
 export class ProviderRegistry {

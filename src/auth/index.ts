@@ -19,6 +19,17 @@ export const ENV_KEYS: Record<string, string> = {
   openrouter: "OPENROUTER_API_KEY",
   "ollama-cloud": "OLLAMA_API_KEY",
   gemini: "GEMINI_API_KEY",
+  xai: "XAI_API_KEY",
+  mistral: "MISTRAL_API_KEY",
+  perplexity: "PERPLEXITY_API_KEY",
+  cerebras: "CEREBRAS_API_KEY",
+  deepinfra: "DEEPINFRA_API_KEY",
+  together: "TOGETHER_API_KEY",
+  fireworks: "FIREWORKS_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  moonshot: "MOONSHOT_API_KEY",
+  alibaba: "DASHSCOPE_API_KEY",
+  venice: "VENICE_API_KEY",
 };
 
 export interface AuthEntry {

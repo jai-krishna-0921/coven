@@ -253,7 +253,11 @@ describe("ModelCatalog.list / providers", () => {
   test("list() returns models across all providers", async () => {
     const catalog = await ModelCatalog.load({ cacheDir: freshCacheDir(), offline: true });
     const all = catalog.list();
-    expect(all.length).toBe(7 + 5 + 5 + 9 + 4 + 5); // + gemini
+    // anthropic 7 + openai 5 + groq 5 + openrouter 9 + ollama 4 + gemini 5
+    // + wave-8 additions: xai 4 + mistral 4 + perplexity 4 + cerebras 3 +
+    //   deepinfra 2 + together 3 + fireworks 2 + deepseek 2 + moonshot 2 +
+    //   alibaba 3 + venice 2.
+    expect(all.length).toBe(7 + 5 + 5 + 9 + 4 + 5 + 4 + 4 + 4 + 3 + 2 + 3 + 2 + 2 + 2 + 3 + 2);
   });
 
   test("providers() exposes id, name and env", async () => {
@@ -261,6 +265,11 @@ describe("ModelCatalog.list / providers", () => {
     const providers = catalog.providers();
     const anthropic = providers.find((p) => p.id === "anthropic");
     expect(anthropic).toEqual({ id: "anthropic", name: "Anthropic", env: ["ANTHROPIC_API_KEY"] });
-    expect(providers.map((p) => p.id)).toEqual(["anthropic", "openai", "groq", "openrouter", "ollama", "gemini"]);
+    // Order reflects fallback.ts insertion order.
+    expect(providers.map((p) => p.id)).toEqual([
+      "anthropic", "openai", "groq", "openrouter", "ollama", "gemini",
+      "xai", "mistral", "perplexity", "cerebras", "deepinfra", "together",
+      "fireworks", "deepseek", "moonshot", "alibaba", "venice",
+    ]);
   });
 });
