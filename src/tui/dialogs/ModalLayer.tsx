@@ -9,6 +9,7 @@
  */
 import { Box } from "ink";
 import type { ReactNode } from "react";
+import { Timeline } from "./Timeline.tsx";
 import { useTheme, useUi } from "../context.tsx";
 import type { CommandContext, ModalKind, ModalProps } from "../types.ts";
 import { Palette } from "./Palette.tsx";
@@ -49,6 +50,8 @@ function renderDialog(kind: ModalKind | undefined, props: ModalProps | undefined
       return <Themes ctx={ctx} />;
     case "whichkey":
       return <WhichKey onCancel={ctx.closeModal} />;
+    case "timeline":
+      return <Timeline ctx={ctx} />;
     case "prompt":
       if (props && (props.kind === "rename" || props.kind === "login")) {
         return (

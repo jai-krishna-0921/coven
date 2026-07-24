@@ -72,6 +72,7 @@ function makeCtx(app: Partial<App> = {}) {
       toast: () => {},
       setReonboarding: () => {},
       scrollBy: () => {},
+    scrollToMessage: () => {},
     },
     session: SESSION,
     abort: new AbortController().signal,

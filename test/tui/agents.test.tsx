@@ -41,6 +41,7 @@ function makeCtx() {
       toast: () => {},
       setReonboarding: () => {},
       scrollBy: () => {},
+    scrollToMessage: () => {},
     },
     session: makeSession("sess1"),
     abort: new AbortController().signal,

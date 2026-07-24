@@ -55,6 +55,7 @@ function makeCtx(): CommandContext {
       toast: () => {},
       setReonboarding: () => {},
       scrollBy: () => {},
+    scrollToMessage: () => {},
     },
     session: makeSession(),
     abort: new AbortController().signal,

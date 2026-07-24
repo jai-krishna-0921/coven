@@ -11,7 +11,7 @@ import type { LspServerStatus } from "../lsp/types.ts";
 export type ModalKind =
   | "palette" | "help" | "whichkey" | "sessions" | "models" | "agents"
   | "themes" | "skills" | "permission" | "status" | "confirm" | "prompt"
-  | "connectors";
+  | "connectors" | "timeline";
 export type ToastKind = "info" | "success" | "warn" | "error";
 export type PaletteCategory =
   | "System" | "Session" | "Model" | "Agent" | "Theme" | "View"
@@ -38,6 +38,7 @@ export interface UiStoreLike {
   toast(text: string, kind?: ToastKind): void;
   setReonboarding(on: boolean): void;
   scrollBy(deltaRows: number): void;   // + = older/up, − = newer/down; clamps; 0 follows tail
+  scrollToMessage(messageID: string): void; // anchor the transcript on a specific message; no-op if id not in history
   clearInput?(): void;                 // optional hook the editor registers for ctrl-c clear
 }
 

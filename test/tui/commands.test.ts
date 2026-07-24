@@ -94,6 +94,7 @@ function makeCtx(defs: CommandDef[] = [initDef]) {
       toast: toastSpy,
       setReonboarding: () => {},
       scrollBy: () => {},
+    scrollToMessage: () => {},
     },
     session: makeSession("parent1"),
     abort: new AbortController().signal,

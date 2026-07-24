@@ -130,6 +130,7 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
       run: (c) => c.store.setSessionID(c.app.store.create({ agent: c.session.agent, title: "New session" }).id),
     },
     { id: "session.list", title: "Sessions", slash: "sessions", category: "Session", keybinding: "ctrl+s", run: (c) => c.openModal("sessions") },
+    { id: "session.timeline", title: "Timeline", slash: "timeline", category: "Session", run: (c) => c.openModal("timeline") },
     { id: "session.resume", title: "Resume session", slash: "resume", category: "Session", run: (c) => c.openModal("sessions") },
     { id: "session.compact", title: "Compact session", slash: "compact", category: "Session", keybinding: "ctrl+shift+k", run: async (c) => { await c.app.engine.compact(c.session.id, { auto: false, abort: c.abort }); } },
     { id: "session.export", title: "Export transcript", slash: "export", category: "Session", run: async (c) => { await c.host.exportTranscript(); } },

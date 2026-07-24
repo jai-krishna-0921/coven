@@ -160,6 +160,20 @@ export class UiStore implements UiStoreLike {
     if (next !== this.state.scrollOffset) this.set({ scrollOffset: next });
   }
 
+  /**
+   * Scroll the transcript so a specific message is anchored at the top of the
+   * visible window. Used by /timeline to jump to a user message. Silently
+   * no-ops when the id isn't in `state.history` (e.g. it's the current live
+   * message, or the id is stale).
+   */
+  scrollToMessage(messageID: string): void {
+    const idx = this.state.history.findIndex((m) => m.id === messageID);
+    if (idx < 0) return;
+    const desired = this.state.history.length - 1 - idx;
+    const next = this.clampScroll(this.state.history, this.state.live, desired);
+    if (next !== this.state.scrollOffset) this.set({ scrollOffset: next });
+  }
+
   /** Coalesce buffered streaming text into `live` (also the test-drivable flush hook). */
   flush(): void {
     if (this.flushTimer) {
