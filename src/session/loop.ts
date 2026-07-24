@@ -106,6 +106,8 @@ export interface EngineOptions {
   modelMeta?: (providerID: string, modelID: string) => ModelMeta;
   /** Snapshot store powering `/undo` — optional, disabled by config knob. */
   snapshot?: import("../snapshot/index.ts").SnapshotStore;
+  /** Called per turn to fetch the MCP server instructions block; empty string = none. */
+  mcpInstructions?: () => string;
 }
 
 const DEFAULT_META: ModelMeta = { contextLimit: 200_000, outputLimit: 32_000 };
@@ -355,6 +357,7 @@ export class SessionEngine {
       skills: this.o.skills,
       config: this.o.config,
       root: this.o.root,
+      mcpInstructions: this.o.mcpInstructions?.(),
     });
     const systemExtra = await this.o.plugins.trigger("chat.system", { agent: agent.name }, { system: [] as string[] });
     const fullSystem = [system, ...systemExtra.system].join("\n\n");

@@ -53,9 +53,42 @@ export interface McpToolCallResult {
 export interface McpServerStatus {
   name: string;
   transport: "stdio" | "sse" | "http";
-  state: "connecting" | "ready" | "error";
+  state: "connecting" | "ready" | "error" | "needs_auth";
   toolCount: number;
+  resourceCount?: number;
+  promptCount?: number;
   error?: string;
+}
+
+/** MCP resource entry from resources/list. */
+export interface McpResource {
+  uri: string;
+  name?: string;
+  description?: string;
+  mimeType?: string;
+}
+
+/** MCP prompt template from prompts/list. */
+export interface McpPromptArgument {
+  name: string;
+  description?: string;
+  required?: boolean;
+}
+
+export interface McpPrompt {
+  name: string;
+  description?: string;
+  arguments?: McpPromptArgument[];
+}
+
+export interface McpPromptMessage {
+  role: "user" | "assistant";
+  content: McpContent | McpContent[];
+}
+
+export interface McpPromptResult {
+  description?: string;
+  messages: McpPromptMessage[];
 }
 
 /** The `mcp` config block per server (stdio subprocess OR remote endpoint). */

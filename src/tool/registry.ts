@@ -39,6 +39,11 @@ export class ToolRegistry {
     this.tools.set(tool.id, tool);
   }
 
+  /** Drop a tool — used by the MCP host to react to tools/list_changed. */
+  unregister(id: string): void {
+    this.tools.delete(id);
+  }
+
   get(id: string): ToolDef<never> | undefined {
     return this.tools.get(id);
   }

@@ -1,5 +1,5 @@
 /** Where a command definition came from; later sources win on name collisions. */
-export type CommandSource = "builtin" | "global" | "project";
+export type CommandSource = "builtin" | "global" | "project" | "mcp" | "skill";
 
 export interface CommandDef {
   /** Slash name, e.g. "init" or "git/pr" for nested files. */
@@ -16,4 +16,10 @@ export interface CommandDef {
   source: CommandSource;
   /** Ordered placeholder names found in the template, e.g. ["$1", "$2"] or ["$ARGUMENTS"]. */
   hints: string[];
+  /**
+   * Async resolver — when present, `expand()` calls it instead of doing
+   * template substitution. Lets MCP-sourced commands fetch their body lazily
+   * from the server at slash-invoke time.
+   */
+  resolve?: (rawArgs: string, opts: { root: string }) => Promise<string>;
 }

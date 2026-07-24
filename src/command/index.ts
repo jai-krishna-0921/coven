@@ -91,6 +91,16 @@ export class CommandRegistry {
   }
 
   /**
+   * Register a command from a non-file source (MCP prompt, skill body). Later
+   * calls with the same name are ignored — file-loaded commands always win
+   * so a user can shadow an auto-registered one.
+   */
+  register(def: CommandDef): void {
+    if (this.commands.has(def.name)) return;
+    this.commands.set(def.name, def);
+  }
+
+  /**
    * Expand a command template with arguments, shell injections, and file attachments.
    *
    * Security: `` !`cmd` `` shell injection runs a command BEFORE the model sees
@@ -105,6 +115,10 @@ export class CommandRegistry {
     rawArgs: string,
     opts: { root: string; gateShell?: (command: string) => Promise<boolean> },
   ): Promise<string> {
+    // A resolver short-circuits the whole template pipeline — MCP prompts
+    // arrive fully-rendered from the server and don't need placeholder /
+    // shell-injection / attachment handling.
+    if (def.resolve) return def.resolve(rawArgs, { root: opts.root });
     let text = def.template;
 
     // 1. Tokenize arguments: quoted spans are single args, surrounding quotes stripped.

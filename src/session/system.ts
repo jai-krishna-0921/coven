@@ -24,6 +24,8 @@ export function assembleSystemPrompt(input: {
   skills: SkillRegistry;
   config: CovenConfig;
   root: string;
+  /** Concatenated <mcp-server> blocks emitted by mcp.instructions() — optional. */
+  mcpInstructions?: string;
 }): string {
   const sections: string[] = [BASE_PROMPT];
 
@@ -58,6 +60,10 @@ Date: ${new Date().toDateString()}
 
   const skillsBlock = input.skills.systemPromptBlock();
   if (skillsBlock) sections.push(skillsBlock);
+
+  if (input.mcpInstructions && input.mcpInstructions.trim()) {
+    sections.push(`<mcp-server-instructions>\n${input.mcpInstructions.trim()}\n</mcp-server-instructions>`);
+  }
 
   return sections.join("\n\n");
 }

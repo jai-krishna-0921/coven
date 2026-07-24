@@ -137,7 +137,19 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
   ]);
   const tts = new Tts(loaded.config.tts ?? {});
   const store = new SessionStore(loaded.root);
-  const mcp = new McpHost(loaded.config.mcp, bus);
+  // MCP + LSP setup — mcp gets an onToolsChanged callback to hot-refresh
+  // the engine tool registry when a server advertises tools/list_changed.
+  let mcpToolIds = new Set<string>();
+  const rebuildMcpTools = () => {
+    // Drop any tool previously registered from MCP, then re-register the current set.
+    for (const id of mcpToolIds) engine.tools.unregister?.(id);
+    mcpToolIds = new Set();
+    for (const tool of mcp.toolDefs()) {
+      engine.tools.register(tool);
+      mcpToolIds.add(tool.id);
+    }
+  };
+  const mcp = new McpHost(loaded.config.mcp, bus, () => rebuildMcpTools());
   const lsp = new LspHost(loaded.config.lsp, loaded.root, bus);
   const snapshot = loaded.config.snapshot === false ? undefined : new SnapshotStore(loaded.root);
   const engine = new SessionEngine({
@@ -151,6 +163,7 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
     plugins,
     permissions,
     snapshot,
+    mcpInstructions: () => mcp.instructions(),
     modelMeta: (providerID, modelID) => {
       const model = catalog.get(providerID, modelID);
       return { contextLimit: model.contextLimit, outputLimit: model.outputLimit, cost: model.cost };
@@ -160,8 +173,44 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
   // Connect MCP + LSP servers and register their tools before the first turn.
   // Failures are isolated per server; absent config makes each a no-op.
   await Promise.all([mcp.connectAll(), lsp.startAll()]);
-  for (const tool of mcp.toolDefs()) engine.tools.register(tool);
+  for (const tool of mcp.toolDefs()) {
+    engine.tools.register(tool);
+    mcpToolIds.add(tool.id);
+  }
   for (const tool of lsp.toolDefs()) engine.tools.register(tool);
+
+  // Auto-register MCP prompts as slash commands (source:"mcp") so every
+  // connected server contributes usable slash-UI. Namespaced under the server
+  // name so two servers can advertise a prompt with the same name safely.
+  for (const p of mcp.promptEntries()) {
+    commands.register({
+      name: `mcp/${p.server}/${p.name}`,
+      description: p.description ?? `MCP prompt "${p.name}" (${p.server})`,
+      template: "",
+      source: "mcp",
+      hints: p.arguments.map((a) => `<${a.name}${a.required ? "" : "?"}>`),
+      resolve: async (rawArgs) => {
+        // Map raw args → the first prompt argument (single-string convention).
+        // Real multi-arg calls come from the palette which knows the schema.
+        const argMap: Record<string, unknown> = {};
+        if (p.arguments[0]) argMap[p.arguments[0].name] = rawArgs;
+        return mcp.fetchPrompt(p.server, p.name, argMap);
+      },
+    });
+  }
+
+  // Auto-register skills as slash commands so a user can invoke a skill
+  // directly (e.g. /brainstorming) instead of going through the skill tool.
+  // Skips names that already have a file-loaded or MCP command.
+  for (const skill of skills.all()) {
+    commands.register({
+      name: skill.name,
+      description: `${skill.description} (skill)`,
+      template: `${skill.content}\n\n<!-- skill base directory: ${skill.dir} -->`,
+      source: "skill",
+      hints: [],
+    });
+  }
 
   return {
     loaded,
