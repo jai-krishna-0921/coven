@@ -38,6 +38,7 @@ export const editTool = defineTool({
     const updated = args.replaceAll
       ? content.split(args.oldString).join(args.newString)
       : content.replace(args.oldString, args.newString);
+    ctx.captureFile?.(path.absolute);
     writeFileSync(path.absolute, updated, "utf8");
     return {
       title: path.display,

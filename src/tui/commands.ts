@@ -167,6 +167,30 @@ export function buildPaletteItems(ctx: CommandContext): PaletteItem[] {
         if (current) c.app.bus.publish({ type: "session.updated", session: current });
       },
     },
+    {
+      id: "session.undo", title: "Undo last turn", slash: "undo", category: "Session",
+      run: (c) => {
+        c.host.interrupt(); // cancel any in-flight turn first
+        const outcome = c.app.engine.revert(c.session.id);
+        if (!outcome) return;
+        const current = c.app.store.get(c.session.id);
+        if (current) c.app.bus.publish({ type: "session.updated", session: current });
+        // Fire a toast-style status so the user sees what happened.
+        c.app.bus.publish({
+          type: "session.status",
+          sessionID: c.session.id,
+          status: "idle",
+        });
+      },
+    },
+    {
+      id: "session.redo", title: "Redo last undo", slash: "redo", category: "Session",
+      run: (c) => {
+        c.app.engine.redo(c.session.id);
+        const current = c.app.store.get(c.session.id);
+        if (current) c.app.bus.publish({ type: "session.updated", session: current });
+      },
+    },
 
     // ---- Model / Agent ----
     { id: "model.picker", title: "Model picker", slash: "models", category: "Model", keybinding: "ctrl+o", run: (c) => c.openModal("models") },

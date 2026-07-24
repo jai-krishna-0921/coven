@@ -20,6 +20,7 @@ export const writeTool = defineTool({
       title: `${exists ? "Overwrite" : "Create"} ${path.display}`,
       metadata: exists ? { diffOf: readFileSync(path.absolute, "utf8").length } : {},
     });
+    ctx.captureFile?.(path.absolute);
     mkdirSync(dirname(path.absolute), { recursive: true });
     writeFileSync(path.absolute, args.content, "utf8");
     const lines = args.content.split("\n").length;

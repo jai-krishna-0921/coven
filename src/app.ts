@@ -17,6 +17,7 @@ import { LspHost } from "./lsp/index.ts";
 import { SessionEngine } from "./session/loop.ts";
 import { SessionStore } from "./session/store.ts";
 import { SkillRegistry } from "./skill/index.ts";
+import { SnapshotStore } from "./snapshot/index.ts";
 import { Tts } from "./tts/index.ts";
 
 /**
@@ -114,6 +115,8 @@ export interface App {
   commands?: CommandsLike;
   mcp?: McpHost;
   lsp?: LspHost;
+  /** Powers `/undo`/`/redo` — undefined when `snapshot: false` in config. */
+  snapshot?: SnapshotStore;
   dispose(): Promise<void>;
 }
 
@@ -136,6 +139,7 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
   const store = new SessionStore(loaded.root);
   const mcp = new McpHost(loaded.config.mcp, bus);
   const lsp = new LspHost(loaded.config.lsp, loaded.root, bus);
+  const snapshot = loaded.config.snapshot === false ? undefined : new SnapshotStore(loaded.root);
   const engine = new SessionEngine({
     config: loaded.config,
     root: loaded.root,
@@ -146,6 +150,7 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
     skills,
     plugins,
     permissions,
+    snapshot,
     modelMeta: (providerID, modelID) => {
       const model = catalog.get(providerID, modelID);
       return { contextLimit: model.contextLimit, outputLimit: model.outputLimit, cost: model.cost };
@@ -174,6 +179,7 @@ export async function createApp(cwd: string = process.cwd()): Promise<App> {
     commands,
     mcp,
     lsp,
+    snapshot,
     dispose: async () => {
       tts.stop();
       await mcp.dispose();

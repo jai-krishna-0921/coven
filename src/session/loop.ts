@@ -104,6 +104,8 @@ export interface EngineOptions {
   permissions: PermissionEngine;
   /** Model metadata lookup (context window, output limit, pricing). Optional — sane defaults apply. */
   modelMeta?: (providerID: string, modelID: string) => ModelMeta;
+  /** Snapshot store powering `/undo` — optional, disabled by config knob. */
+  snapshot?: import("../snapshot/index.ts").SnapshotStore;
 }
 
 const DEFAULT_META: ModelMeta = { contextLimit: 200_000, outputLimit: 32_000 };
@@ -179,11 +181,53 @@ export class SessionEngine {
       const lastAssistant = this.o.store.messagesOf(sessionID).filter((m) => m.role === "assistant" && !m.summary).at(-1);
       const hasAssistantText = lastAssistant?.parts.some((p) => p.type === "text" && p.text.trim().length > 0) ?? false;
       if (isFirstUserTurn && hasAssistantText) void this.ensureTitle(sessionID).catch(() => { /* best-effort */ });
+      // Freeze this turn's pending file captures under the user-message id so
+      // `/undo` can restore them. No-op if snapshots are disabled or no writes
+      // happened this turn.
+      try {
+        this.o.snapshot?.snapshot(sessionID, userMessage.id);
+      } catch { /* best effort — never let snapshot fail a turn */ }
       return result;
     } finally {
       this.o.bus.publish({ type: "session.status", sessionID, status: "idle" });
       this.o.store.update(session);
     }
+  }
+
+  /**
+   * Undo the most recent user turn — restore the files that turn's tools
+   * mutated and drop the assistant messages produced by that turn. The user
+   * message itself is returned so the caller (TUI /undo) can re-populate the
+   * prompt for editing. No-op when snapshots are disabled or the session has
+   * no user turns to revert.
+   */
+  revert(sessionID: string): { messageID: string; text: string; restored: string[]; skipped: string[] } | undefined {
+    if (!this.o.snapshot) return undefined;
+    const messages = this.o.store.messagesOf(sessionID);
+    const lastUserIdx = [...messages].reverse().findIndex((m) => m.role === "user" && !m.compaction);
+    if (lastUserIdx < 0) return undefined;
+    const userIdx = messages.length - 1 - lastUserIdx;
+    const userMsg = messages[userIdx]!;
+    const outcome = this.o.snapshot.revert(sessionID, userMsg.id);
+    // Drop everything from this user turn onward — messages remain on disk in
+    // the snapshot dir if a future timeline picker wants them, but the live
+    // conversation rewinds cleanly.
+    const kept = messages.slice(0, userIdx);
+    const list = this.o.store.messagesOf(sessionID);
+    list.length = 0;
+    list.push(...kept);
+    this.o.store.persist(sessionID);
+    const text = userMsg.parts
+      .filter((p) => p.type === "text")
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join("");
+    return { messageID: userMsg.id, text, restored: outcome.restored, skipped: outcome.skipped };
+  }
+
+  /** Re-apply the file state that was on disk at the moment of the last revert. */
+  redo(sessionID: string): boolean {
+    if (!this.o.snapshot) return false;
+    return this.o.snapshot.redo(sessionID);
   }
 
   /**
@@ -692,6 +736,7 @@ export class SessionEngine {
         const skill = this.o.skills.get(name);
         return skill ? { content: skill.content, dir: skill.dir } : undefined;
       },
+      captureFile: this.o.snapshot ? (path) => this.o.snapshot!.captureFile(sessionID, path) : undefined,
     };
 
     try {

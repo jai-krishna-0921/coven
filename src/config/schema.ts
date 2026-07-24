@@ -93,6 +93,8 @@ export const CovenConfig = z
     plugins: z.array(z.string()).optional(),
     /** Hard cap on agentic iterations per user turn. */
     max_steps: z.number().int().positive().optional(),
+    /** Enable per-turn file snapshots powering `/undo` and `/redo`. Default: true. */
+    snapshot: z.boolean().optional(),
     /** MCP servers to connect, keyed by name. Tools appear as mcp__<name>__<tool>. */
     mcp: z.record(z.string(), McpServerConfig).optional(),
     /** LSP language servers to run, keyed by language id. */

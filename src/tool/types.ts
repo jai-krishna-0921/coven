@@ -24,6 +24,13 @@ export interface ToolContext {
   spawnSubagent?(input: { agent: string; prompt: string; description: string }): Promise<string>;
   /** Load a skill body by name (injected by the session layer; used by the skill tool). */
   loadSkill?(name: string): { content: string; dir: string } | undefined;
+  /**
+   * Record a file's current on-disk state under the pending snapshot for this
+   * session — write-side tools call this BEFORE mutating so `/undo` can
+   * restore it. No-op when snapshots are disabled or the path is outside
+   * the workspace. Safe to call multiple times on the same path.
+   */
+  captureFile?(path: string): void;
 }
 
 export interface ToolResult {
