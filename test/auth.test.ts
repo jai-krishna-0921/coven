@@ -88,14 +88,14 @@ describe("AuthStore", () => {
       const store = new AuthStore(tempDataDir());
       store.set("anthropic", "sk-from-auth-json");
       process.env[envName] = "sk-from-env";
-      expect(store.resolveKey("anthropic")).toEqual({ key: "sk-from-env", source: "env" });
+      expect(store.resolveKey("anthropic")).toEqual({ key: "sk-from-env", source: "env", kind: "api" });
     });
 
     test("falls back to auth.json when env var is unset", () => {
       const store = new AuthStore(tempDataDir());
       store.set("anthropic", "sk-from-auth-json");
       delete process.env[envName];
-      expect(store.resolveKey("anthropic")).toEqual({ key: "sk-from-auth-json", source: "auth.json" });
+      expect(store.resolveKey("anthropic")).toEqual({ key: "sk-from-auth-json", source: "auth.json", kind: "api" });
     });
 
     test("returns undefined when neither env nor auth.json has the provider", () => {
