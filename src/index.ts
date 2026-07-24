@@ -31,7 +31,7 @@ import type { SessionInfo } from "./session/types.ts";
 import { bold, cyan, dim, green, red, yellow } from "./util/ansi.ts";
 import { createLogger } from "./util/log.ts";
 
-const VERSION = "0.4.1";
+const VERSION = "0.5.0";
 const log = createLogger("main");
 
 function installCrashGuards(): void {

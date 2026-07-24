@@ -3,6 +3,83 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] — 2026-07-24
+
+Eight-wave feature parity push against OpenCode's user-visible surface.
+The 6 → 17 provider matrix, `/undo`, MCP resources+prompts, OAuth 2.0,
+LSP call-hierarchy, and full CLI session lifecycle are the headline
+adds. Intentionally deferred (foundational refactors): HTTP `coven
+serve`, Ink → OpenTUI, Drizzle + SQLite.
+
+### Added
+
+- **CLI session lifecycle.** `coven session list [--format json] [-n <N>] [--search <s>] [--archived]`,
+  `coven session {delete,fork,archive,unarchive,export,import}`. Export
+  has three redaction levels — `off`/`text`/`aggressive` — for safe sharing.
+  `coven run` gains `-c/--continue`, `-s/--session <id>`, `--fork`,
+  `--model <ref>`, `--format json`. `coven --continue`/`--session <id>`
+  opens an existing session in the TUI.
+- **`coven upgrade`** with auto-detected install method (`npm`/`pnpm`/
+  `bun`/`brew`/`curl`), `--method` override, `--dry-run`.
+- **`coven completion [bash|zsh|fish]`** emits shell completion scripts.
+- **Session UX.** Auto-title via small_model after first assistant turn
+  (skips no-op turns and user-set titles). `store.fork(id, upToMessageID?)`
+  clones a session (or a prefix), exposed as `/fork` in the TUI. Search,
+  archive, metadata blob, message paging.
+- **`/undo` and `/redo`** — new snapshot store (`src/snapshot/`) captures
+  file contents before every write/edit and freezes them per user turn.
+  Undo restores those files AND rewinds messages; redo puts them back.
+  Config toggle `snapshot: false` disables the whole subsystem.
+- **LSP: 4 → 8 tools.** New `lsp_implementation`, `lsp_document_symbol`,
+  `lsp_workspace_symbol` (fan-out across every language server),
+  `lsp_call_hierarchy` (incoming/outgoing, auto-runs prepareCallHierarchy).
+- **MCP resources + prompts.** MCP prompts auto-register as
+  `/mcp/<server>/<name>` slash commands, resolved lazily via
+  `prompts/get`. Server-side `instructions` folded into the system prompt
+  under `<mcp-server-instructions>`. `notifications/tools/list_changed`
+  triggers a live tool-list refresh mid-session. Client declares `roots`
+  capability and answers `roots/list` with the workspace root. Server
+  logs flow through the Coven logger.
+- **Skills as slash commands.** Every registered skill is auto-registered
+  as a slash command (e.g. `/brainstorming`) — file-loaded commands still
+  win on name collision.
+- **OAuth 2.0.** `src/auth/oauth.ts` PKCE + CSRF-state + local callback
+  HTTP server with browser auto-launch and printed-URL fallback. New
+  `coven auth login <provider> --oauth` (Anthropic Pro wired first) and
+  `coven mcp auth <server>` (OAuth-gated MCP servers — Notion/Linear/
+  Sentry/Cloudflare style). AuthStore extended with an `oauth` credential
+  variant; `resolveKey()` returns `kind: "api" | "oauth"`.
+- **11 new providers.** `xai`, `mistral`, `perplexity`, `cerebras`,
+  `deepinfra`, `together`, `fireworks`, `deepseek`, `moonshot`, `alibaba`,
+  `venice` — all OpenAI-compat, catalog entries for ~35 headline models.
+- **TUI polish.** `/copy` copies the entire transcript to the system
+  clipboard (pbcopy/clip/wl-copy/xclip/xsel). `/timestamps` and
+  `/thinking` toggle prefs. `/debug` alias for the status/info dialog.
+  Toast surface documented (was already wired).
+- **Per-session permission rulesets.** `PermissionEngine.setSessionRules
+  (sessionID, ruleset)` slots between agent rules and approved — a session
+  can be locked down without editing config.
+
+### Changed
+
+- **Command source enum** extended with `"mcp"` and `"skill"`.
+  `CommandDef.resolve?()` optional async body resolver — used by MCP
+  prompts to fetch the template at invoke time.
+- **ToolRegistry.unregister(id)** added so the MCP hot-refresh path can
+  drop stale tool ids cleanly.
+
+### Deferred (documented for future waves)
+
+- HTTP server (`coven serve`) — unlocks `attach`, `web`, `acp`, Slack
+  bot, GitHub Action, VS Code extension. Foundational XL work.
+- Ink → OpenTUI/Solid TUI rewrite — required for OpenCode's slot-based
+  plugin API.
+- Drizzle + SQLite session storage — JSONL works today.
+- Native Gemini adapter (currently OpenAI-compat shim) — deferred to a
+  cloud-provider wave alongside Bedrock/Azure/Vertex.
+- Timeline dialog + fork picker, question tool inline prompt, export
+  options dialog, session-delete recovery.
+
 ## [0.4.1] — 2026-07-16
 
 ### Added

@@ -109,7 +109,7 @@ export class LspClient {
           symbol: { dynamicRegistration: false },
         },
       },
-      clientInfo: { name: "coven", version: "0.4.1" },
+      clientInfo: { name: "coven", version: "0.5.0" },
     });
     this.notify("initialized", {});
     log.debug("lsp: initialized", { rootUri: this.opts.rootUri });
