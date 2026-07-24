@@ -4,7 +4,7 @@
  *   messages.jsonl  — one Message per line, append-ordered
  * Messages are rewritten in full on update (files are small; simplicity wins).
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
@@ -60,14 +60,71 @@ export class SessionStore {
    * Remove a session from memory and best-effort delete its on-disk directory.
    * A read-only HOME (or a missing dir) is not an error — the session vanishes
    * from the in-memory cache either way; disk cleanup is opportunistic.
+   *
+   * Kept for legacy callers; new code should use `deleteChecked` which reports
+   * the disk-op outcome so a caller can drive the recovery flow.
    */
   delete(sessionID: string): void {
+    this.deleteChecked(sessionID);
+  }
+
+  /**
+   * Same as `delete` but returns whether the disk-op succeeded. In-memory
+   * removal always happens; the disk error (if any) is surfaced so the caller
+   * can present recovery options (retry / move to trash / metadata-only).
+   */
+  deleteChecked(sessionID: string): { ok: true } | { ok: false; error: string } {
     this.sessions.delete(sessionID);
     this.messages.delete(sessionID);
+    return this.retryRm(sessionID);
+  }
+
+  /** Just the disk half — recovery flow calls this after a prior failed attempt. */
+  retryRm(sessionID: string): { ok: true } | { ok: false; error: string } {
+    const dir = this.dirOf(sessionID);
+    if (!existsSync(dir)) return { ok: true };
     try {
-      rmSync(this.dirOf(sessionID), { recursive: true, force: true });
-    } catch {
-      /* best effort — persistence layer may already be disabled */
+      rmSync(dir, { recursive: true, force: true });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error) };
+    }
+  }
+
+  /**
+   * Move the session directory into a sibling `trash/` folder timestamped so
+   * multiple failed deletes don't collide. Returns the moved-to path so the
+   * caller can print it. The in-memory entry has already been removed by
+   * `deleteChecked`, so a follow-up `list()` will not surface the session.
+   */
+  moveToTrash(sessionID: string): { ok: true; path: string } | { ok: false; error: string } {
+    const src = this.dirOf(sessionID);
+    if (!existsSync(src)) return { ok: true, path: src };
+    const trashRoot = join(this.baseDir, "..", "trash");
+    const dest = join(trashRoot, `${Date.now()}-${sessionID}`);
+    try {
+      mkdirSync(trashRoot, { recursive: true });
+      renameSync(src, dest);
+      return { ok: true, path: dest };
+    } catch (error) {
+      return { ok: false, error: String(error) };
+    }
+  }
+
+  /**
+   * Last-resort: unlink just info.json so `list()` no longer surfaces the
+   * session. messages.jsonl stays on disk (an orphan that a user can archive
+   * manually). Useful when even the `rmdir` fails (immutable flag, permission
+   * quirk).
+   */
+  unlinkMetadataOnly(sessionID: string): { ok: true } | { ok: false; error: string } {
+    const infoPath = join(this.dirOf(sessionID), "info.json");
+    if (!existsSync(infoPath)) return { ok: true };
+    try {
+      unlinkSync(infoPath);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error) };
     }
   }
 

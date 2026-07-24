@@ -27,6 +27,7 @@ import { ModelCatalog } from "./catalog/index.ts";
 import { createApp } from "./app.ts";
 import { runTui } from "./tui/index.ts";
 import { exportSession, importSession, parseSessionExport, redactExport, type RedactLevel } from "./session/serialize.ts";
+import { performDelete, type DeleteChoice } from "./session/deleteFlow.ts";
 import type { SessionInfo } from "./session/types.ts";
 import { bold, cyan, dim, green, red, yellow } from "./util/ansi.ts";
 import { createLogger } from "./util/log.ts";
@@ -211,13 +212,36 @@ async function sessionCommand(positional: string[], flags: Map<string, string | 
         console.error(`${red("✗")} usage: coven session delete <session-id>`);
         process.exit(1);
       }
-      const target = app.store.list().find((s) => s.id === id || s.id.endsWith(id));
+      const target = app.store.list({ archived: true }).find((s) => s.id === id || s.id.endsWith(id));
       if (!target) {
         console.error(`${red("✗")} no such session: ${id}`);
         process.exit(1);
       }
-      app.store.delete(target.id);
-      console.log(`${green("✓")} deleted ${target.id}`);
+      const autoYes = flags.get("yes") === true;
+      const askChoice = async (ctx: { error: string }): Promise<DeleteChoice> => {
+        if (autoYes) return "cancel"; // scripted runs shouldn't block on stdin
+        console.error(`${red("✗")} delete failed: ${ctx.error}`);
+        console.error("  1) Retry");
+        console.error("  2) Move to trash directory");
+        console.error("  3) Force-remove metadata only (leaves messages.jsonl)");
+        console.error("  4) Cancel");
+        while (true) {
+          const pick = (await ask("choose 1-4: ")).trim();
+          if (pick === "1") return "retry";
+          if (pick === "2") return "trash";
+          if (pick === "3") return "metadata";
+          if (pick === "4" || pick.toLowerCase() === "c") return "cancel";
+          console.error("  (unrecognised — enter 1, 2, 3, or 4)");
+        }
+      };
+      const outcome = await performDelete(app.store, target.id, askChoice);
+      if (outcome.outcome === "deleted") console.log(`${green("✓")} deleted ${target.id}`);
+      else if (outcome.outcome === "trashed") console.log(`${green("✓")} moved to trash: ${outcome.path}`);
+      else if (outcome.outcome === "metadata-only") console.log(`${yellow("⚠")} metadata removed; messages.jsonl remains on disk`);
+      else {
+        console.error(`${red("✗")} cancelled (${outcome.lastError ?? "no attempt succeeded"})`);
+        process.exit(1);
+      }
       return;
     }
     if (sub === "export") {

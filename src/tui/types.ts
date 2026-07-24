@@ -11,7 +11,7 @@ import type { LspServerStatus } from "../lsp/types.ts";
 export type ModalKind =
   | "palette" | "help" | "whichkey" | "sessions" | "models" | "agents"
   | "themes" | "skills" | "permission" | "status" | "confirm" | "prompt"
-  | "connectors" | "timeline" | "export";
+  | "connectors" | "timeline" | "export" | "delete-recovery";
 export type ToastKind = "info" | "success" | "warn" | "error";
 export type PaletteCategory =
   | "System" | "Session" | "Model" | "Agent" | "Theme" | "View"
@@ -27,7 +27,8 @@ export type ModalProps =
   | { kind: "rename"; message: string; initial: string; onSubmit(title: string): void }
   | { kind: "login"; message: string; onSubmit(key: string): void }
   | { kind: "confirm"; message: string; onYes(): void; onNo(): void }
-  | { kind: "export"; defaults: import("./export.ts").ExportOptions; onSubmit(options: import("./export.ts").ExportOptions): void };
+  | { kind: "export"; defaults: import("./export.ts").ExportOptions; onSubmit(options: import("./export.ts").ExportOptions): void }
+  | { kind: "delete-recovery"; sessionID: string; sessionTitle: string; error: string; onChoice(choice: import("../session/deleteFlow.ts").DeleteChoice): void };
 
 // Structural view of UiStore (Task 14) so types.ts has no forward module dependency.
 export interface UiStoreLike {
